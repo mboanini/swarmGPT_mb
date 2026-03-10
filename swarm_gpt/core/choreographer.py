@@ -86,6 +86,25 @@ class Choreographer:
         msgs.append({"role": "system", "content": self.prompts["output_format"]})
         return msgs
 
+    def format_initial_prompt(self, text: str) -> list[dict[str, str]]:
+        """Format the initial prompt for the LLM.
+
+        Args:
+            song: The name of the song.
+            music_info: The beat times, amplitude and frequency of the song.
+
+        Returns:
+            The formatted initial prompt.
+        """
+        logger.debug("Formatting initial prompt")
+        msgs = []
+        user_prompt = self._format_initial_user_prompt_no_music(text)
+        msgs.append({"role": "system", "content": self.prompts["system_initial"]})
+        msgs.append({"role": "user", "content": user_prompt})
+        msgs.append({"role": "system", "content": self.prompts["example"]})
+        msgs.append({"role": "system", "content": self.prompts["output_format"]})
+        return msgs
+
     def format_reprompt(self, message: str) -> list[dict[str, str]]:
         """Format the reprompt for the LLM."""
         logger.debug("Formatting reprompt")
@@ -181,6 +200,32 @@ class Choreographer:
             "wave_eqn": data["wave"] if self.use_motion_primitives else None,
         }
         return self.prompts["user_initial"].format(**prompt_kwargs)
+    
+    def _format_initial_user_prompt_no_music(self, text: str) -> str:
+        """Format the initial user prompt for the LLM.
+
+        Args:
+            text: prompt given by the user 
+        """
+        # Convert to cm for LLM compatibility
+        starting_pos = [(pos * 100).astype(int).tolist() for pos in self.starting_pos.values()]
+        wave_eqn = None
+        if self.use_motion_primitives:
+            # Load the YAML file
+            latex_file = Path(__file__).resolve().parents[1] / "data/latex_eqn.yaml"
+            with open(latex_file, "r") as file:
+                data = yaml.safe_load(file)
+                wave_eqn = data.get("wave")
+
+        prompt_kwargs = {
+            "text": text,
+            "num_drones": self.num_drones,
+            "starting_pos": starting_pos,
+            "lim_lower": self.lim_lower * 100,
+            "lim_upper": self.lim_upper * 100,
+            "wave_eqn": wave_eqn,
+        }
+        return self.prompts["user_command_initial"].format(**prompt_kwargs)
 
     def _call_openai(self, messages: list[dict[str, str]]) -> str:
         response = client.chat.completions.create(
