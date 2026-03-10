@@ -126,6 +126,56 @@ class AppBackend:
         return [s.name for s in (self.root_path / "swarm_gpt/data/presets").glob("*")]
 
     @self_correct(n_retries=2)
+    def initial_prompt_no_music(self, text: str, *, response: str | None = None) -> list[dict[str, str]]:
+        """Set the song and generate the choreography.
+
+        Args:
+            song: Name of the song or preset to use.
+            response: Optional, predefined response. Used for testing.
+
+        Returns:
+            The chat history as a list of dictionaries with the role and content.
+        """
+        print("backend.py - initial_prompt: input response = ")
+        print(response)
+        print("backend.py - initial_prompt: input song = ")
+        print(text)
+        logger.info(f"Generating initial choreography for this prompt: {text}")
+        self.choreographer.reset_history()
+        prompt = self.choreographer.format_initial_prompt_no_music(text)
+        print("backend.py - initial_prompt: prompt = ")
+        print(prompt)
+
+        fixed_response = response is not None
+        # if preset := song in self.presets:  # Preset was provided == song è in self.presets? True/False => Se preset == True : ... elif...
+        if fixed_response:  # Response was provided, do not use LLM
+            logger.debug(f"Using predefined response: {response}")
+            self.choreographer.messages.append({"role": "assistant", "content": response})
+        else:  # Use LLM to generate the choreography
+            logger.debug(f"Using LLM to generate choreography for prompt: {text}")
+            response = self.choreographer.generate_choreography(prompt)
+            print("backend.py - initial_prompt: response = ")
+            print(response)
+
+        try:
+            self.waypoints = self.choreographer.response2waypoints(
+                response, music_info=music_info, strict=self._strict_processing
+            )
+            print("backend.py - initial_prompt: waypoints = ")
+            print(self.waypoints)
+        except LLMException as e:
+            # We do not want to retry if we are using a preset or a fixed response. This
+            # would use the LLM. We raise an error type that is not caught by
+            # self_correct to exit immediately.
+            if preset or fixed_response:
+                raise RuntimeError("Initial prompt failed") from e
+            raise e
+        logger.info("Successfully generated choreography")
+        print("backend.py - initial_prompt: output self.choreographer.messages = ")
+        print(self.choreographer.messages)
+        return self.choreographer.messages
+
+    @self_correct(n_retries=2)
     def initial_prompt(self, song: str, *, response: str | None = None) -> list[dict[str, str]]:
         """Set the song and generate the choreography.
 
