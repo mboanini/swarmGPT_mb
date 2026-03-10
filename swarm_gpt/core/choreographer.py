@@ -86,12 +86,11 @@ class Choreographer:
         msgs.append({"role": "system", "content": self.prompts["output_format"]})
         return msgs
 
-    def format_initial_prompt(self, text: str) -> list[dict[str, str]]:
+    def format_initial_prompt_no_music(self, text: str) -> list[dict[str, str]]:
         """Format the initial prompt for the LLM.
 
         Args:
-            song: The name of the song.
-            music_info: The beat times, amplitude and frequency of the song.
+            text: text of the prompt
 
         Returns:
             The formatted initial prompt.
@@ -264,15 +263,14 @@ class Choreographer:
             drones, times = drones.tolist(), times.tolist()
             raise LLMPlanError(f"Drones {set(drones)} get too close at waypoints {set(times)}")
 
-    def response2waypoints(
-        self, text: str, music_info: dict, strict: bool = True
+    def response2waypoints_no_music(
+        self, text: str, strict: bool = True
     ) -> dict[str, NDArray]:
         """Translate the LLM output into waypoints.
 
         Args:
             text: The output of the LLM. Is expected to follow the format specified in the
                 format instructions of the output parser.
-            music_info: The beat times, amplitude and frequency of the song.
             strict: Enable/disable waypoint proximity and distance checks.
 
         Returns:
@@ -286,16 +284,16 @@ class Choreographer:
             choreo = self._response2choreo(text)
             print("choreographer.py - response2waypoints: choreo with filters = ")
             print(choreo)
-            waypoints = self._choreo2waypoints(choreo, music_info["beat_times"])
+            waypoints_no_music = self._choreo2waypoints_no_music(choreo)
             print("choreographer.py - response2waypoints: waypoints = ")
-            print(waypoints)
+            print(waypoints_no_music)
         else:
-            waypoints = self._raw_response2waypoints(text, music_info["beat_times"])
+            waypoints_no_music = self._raw_response2waypoints_no_music(text)
         # Clip waypoint values to the physical limits
-        waypoints["pos"] = np.clip(waypoints["pos"], self.lim_lower, self.lim_upper)
+        waypoints_no_music["pos"] = np.clip(waypoints_no_music["pos"], self.lim_lower, self.lim_upper)
         if strict:
-            self._collision_check(waypoints["pos"])
-        return waypoints
+            self._collision_check(waypoints_no_music["pos"])
+        return waypoints_no_music
 
     def _response2choreo(self, text: str) -> dict[int, list[str]]:
         """Translate the LLM output into a choreography."""
