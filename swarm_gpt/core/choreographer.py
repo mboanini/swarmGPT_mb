@@ -58,7 +58,8 @@ class Choreographer:
         self.num_drones = 0
         self.messages = []
         # Load prompts from file
-        prompt = "motion_primitive_prompts" if self.use_motion_primitives else "prompts"
+        prompt = "prompts_no_music"
+        # prompt = "motion_primitive_prompts" if self.use_motion_primitives else "prompts"
         with open(Path(__file__).resolve().parents[1] / f"data/{prompt}.yaml", "r") as f:
             self.prompts = yaml.safe_load(f)
         self.load_drone_config(config_file)
@@ -67,37 +68,18 @@ class Choreographer:
         self.lim_upper = np.array(self.settings["axswarm"]["pos_max"])
         assert len(self.lim_lower) == 3 and len(self.lim_upper) == 3, "Limits must be 3D"
 
-    def format_initial_prompt(self, song: str, music_info: dict) -> list[dict[str, str]]:
+    def format_initial_prompt(self, user_command: str) -> list[dict[str, str]]:
         """Format the initial prompt for the LLM.
 
         Args:
-            song: The name of the song.
-            music_info: The beat times, amplitude and frequency of the song.
+            user_command: Prompt given by the user.
 
         Returns:
             The formatted initial prompt.
         """
         logger.debug("Formatting initial prompt")
         msgs = []
-        user_prompt = self._format_initial_user_prompt(song, music_info)
-        msgs.append({"role": "system", "content": self.prompts["system_initial"]})
-        msgs.append({"role": "user", "content": user_prompt})
-        msgs.append({"role": "system", "content": self.prompts["example"]})
-        msgs.append({"role": "system", "content": self.prompts["output_format"]})
-        return msgs
-
-    def format_initial_prompt_no_music(self, text: str) -> list[dict[str, str]]:
-        """Format the initial prompt for the LLM.
-
-        Args:
-            text: text of the prompt
-
-        Returns:
-            The formatted initial prompt.
-        """
-        logger.debug("Formatting initial prompt")
-        msgs = []
-        user_prompt = self._format_initial_user_prompt_no_music(text)
+        user_prompt = self._format_initial_user_prompt(user_command)
         msgs.append({"role": "system", "content": self.prompts["system_initial"]})
         msgs.append({"role": "user", "content": user_prompt})
         msgs.append({"role": "system", "content": self.prompts["example"]})
@@ -149,62 +131,12 @@ class Choreographer:
             self.starting_pos[i][2] = self.settings["starting_height"]
         self.num_drones = len(self.agents.values())
         assert self.num_drones > 0, "No drones detected in config file"
-
-    def _format_initial_user_prompt(self, song: str, music_info: dict) -> str:
-        """Format the initial user prompt for the LLM.
-
-        Args:
-            song: The name of the song.
-            music_info: The beat times, amplitude and frequency of the song.
-        """
-        # Convert to cm for LLM compatibility
-        starting_pos = [(pos * 100).astype(int).tolist() for pos in self.starting_pos.values()]
-        beat_times = {i + 1: round(10 * x) for i, x in enumerate(music_info["beat_times"])}
-        novelty = {i + 1: int(x * 100) for i, x in enumerate(music_info["novelty"])}
-        chords = {i + 1: v for i, v in enumerate(music_info["chords"])}
-        dt = np.diff(music_info["beat_times"])
-        dt[1:] = dt[:-1]  # Shift to the right to align with the beat times
-        dt[0] = music_info["beat_times"][0]  # Set the first value to the first beat time
-        beat_intervals = {i + 1: round(10 * x) for i, x in enumerate(dt)}
-        # We calculate a maximum distance each drone is allowed to travel at the given beat to limit
-        # excessive movements
-        max_vel = self.settings["axswarm"]["vel_max"]
-        # Divide by sqrt(3) to get the maximum distance in 3D space for one axis assuming all axes
-        # change in the worst case
-        max_distances = dict()
-        for i in range(len(music_info["beat_times"])):
-            dt = music_info["beat_times"][i] - (music_info["beat_times"][i - 1] if i > 0 else 0)
-            max_distances[i + 1] = int(max_vel * dt / np.sqrt(3) * 100)
-        dbfs = {i + 1: int(x) for i, x in enumerate(music_info["dBFS"])}
-        if self.use_motion_primitives:
-            # Load the YAML file
-            latex_file = Path(__file__).resolve().parents[1] / "data/latex_eqn.yaml"
-            with open(latex_file, "r") as file:
-                data = yaml.safe_load(file)
-
-        prompt_kwargs = {
-            "song": song,
-            "num_drones": self.num_drones,
-            "beat_times": beat_times,
-            "num_beats": len(music_info["beat_times"]),
-            "starting_pos": starting_pos,
-            "num_waypoints": len(music_info["beat_times"]),
-            "beat_novelty": novelty,
-            "chords": chords,
-            "max_distances": max_distances,
-            "beat_intervals": beat_intervals,
-            "dbfs": dbfs,
-            "lim_lower": self.lim_lower * 100,
-            "lim_upper": self.lim_upper * 100,
-            "wave_eqn": data["wave"] if self.use_motion_primitives else None,
-        }
-        return self.prompts["user_initial"].format(**prompt_kwargs)
     
-    def _format_initial_user_prompt_no_music(self, text: str) -> str:
+    def _format_initial_user_prompt(self, user_command: str) -> str:
         """Format the initial user prompt for the LLM.
 
         Args:
-            text: prompt given by the user 
+            user_command: prompt given by the user 
         """
         # Convert to cm for LLM compatibility
         starting_pos = [(pos * 100).astype(int).tolist() for pos in self.starting_pos.values()]
@@ -217,7 +149,7 @@ class Choreographer:
                 wave_eqn = data.get("wave")
 
         prompt_kwargs = {
-            "text": text,
+            "user_command": user_command,
             "num_drones": self.num_drones,
             "starting_pos": starting_pos,
             "lim_lower": self.lim_lower * 100,
@@ -246,24 +178,16 @@ class Choreographer:
             ValueError: If two drones are too close together at the same time.
         """
         differences = pos[:, None, :, :] - pos[None, :, :, :]  # Reshape for broadcasting
-        print("choreographer.py - _collision_check: differences = ")
-        print(differences)
         distance = np.linalg.norm(differences, axis=-1)
-        print("choreographer.py - _collision_check: distance = ")
-        print(distance)
         # Set the diagonal to a large number to avoid comparing the same drone
         distance += np.eye(self.num_drones).reshape(self.num_drones, self.num_drones, 1) * 1000
-        print("choreographer.py - _collision_check: distance = ")
-        print(distance)
         min_distance = np.min(distance, axis=1)  # (n_drones, T). Closest encounter for each time
-        print("choreographer.py - _collision_check: min_distance = ")
-        print(min_distance)
         if np.any(min_distance < min_dist):
             drones, times = np.nonzero(min_distance < min_dist)
             drones, times = drones.tolist(), times.tolist()
             raise LLMPlanError(f"Drones {set(drones)} get too close at waypoints {set(times)}")
 
-    def response2waypoints_no_music(
+    def response2waypoints(
         self, text: str, strict: bool = True
     ) -> dict[str, NDArray]:
         """Translate the LLM output into waypoints.
@@ -271,6 +195,7 @@ class Choreographer:
         Args:
             text: The output of the LLM. Is expected to follow the format specified in the
                 format instructions of the output parser.
+            music_info: The beat times, amplitude and frequency of the song.
             strict: Enable/disable waypoint proximity and distance checks.
 
         Returns:
@@ -278,31 +203,26 @@ class Choreographer:
             (n_drones, T), and "pos", "vel", "acc" have shape (n_drones, T, 3).
         """
         logger.debug("Converting LLM output into waypoints")
+
+        choreo_steps = self._slice_choreography_from_text(text)
+        num_steps = len(choreo_steps)
+        timestamps = np.arange(1, num_steps + 1) * 0.5
+
         if self.use_motion_primitives:
-            print("choreographer.py - response2waypoints: text = ")
-            print(text)
-            choreo = self._response2choreo(text)
-            print("choreographer.py - response2waypoints: choreo with filters = ")
-            print(choreo)
-            waypoints_no_music = self._choreo2waypoints_no_music(choreo)
-            print("choreographer.py - response2waypoints: waypoints = ")
-            print(waypoints_no_music)
+            # choreo = self._response2choreo(text)
+            waypoints = self._choreo2waypoints(choreo_steps, timestamps)
         else:
-            waypoints_no_music = self._raw_response2waypoints_no_music(text)
+            waypoints = self._raw_response2waypoints(text, timestamps)
         # Clip waypoint values to the physical limits
-        waypoints_no_music["pos"] = np.clip(waypoints_no_music["pos"], self.lim_lower, self.lim_upper)
+        waypoints["pos"] = np.clip(waypoints["pos"], self.lim_lower, self.lim_upper)
         if strict:
-            self._collision_check(waypoints_no_music["pos"])
-        return waypoints_no_music
+            self._collision_check(waypoints["pos"])
+        return waypoints
 
     def _response2choreo(self, text: str) -> dict[int, list[str]]:
         """Translate the LLM output into a choreography."""
         assert self.use_motion_primitives, "Motion primitives not set in _response2choreo"
-        print("choreographer.py - _response2choreo: text before = ")
-        print(text)
         choreography = self._slice_choreography_from_text(text)
-        print("choreographer.py - _response2choreo: choreography = ")
-        print(choreography)
         # Filter out unnecessary PLAN commands
         for i, moves in choreography.items():
             if any(k in moves for k in ["helix", "spiral", "zig_zag", "wave"]) and (
@@ -355,10 +275,6 @@ class Choreographer:
                 motion_primitives[i].append({fn_name: fn_args})
 
         t, pos = self._motion_primitives2time_and_pos(motion_primitives, timestamps)
-        print("choreographer.py - _choreo2waypoints: t = ")
-        print(t)
-        print("choreographer.py - _choreo2waypoints: pos = ")
-        print(pos)
         return {"time": t, "pos": pos, "vel": np.zeros_like(pos), "acc": np.zeros_like(pos)}
 
     def _raw_response2waypoints(self, text: str, timestamps: NDArray) -> dict[int, np.ndarray]:
@@ -451,20 +367,12 @@ class Choreographer:
         # Add time information to the motion_primitives, filter out PLAN motion_primitives, add
         # additional time to the function before plan
         timestamps = np.concatenate(([0], timestamps))  # Add 0 start time
-        print("choreographer.py - _motion_primitives2time_and_pos: input motion primitives = ")
-        print(motion_primitives)
         motion_primitives = self._merge_motion_primitives(motion_primitives, timestamps)
-        print("choreographer.py - _motion_primitives2time_and_pos: motion primitives = ")
-        print(motion_primitives)
         for motion_primitive in motion_primitives.values():
             for fn, args in zip(motion_primitive["fn"], motion_primitive["args"]):
                 swarm_pos, _waypoints = self._primitive2waypoints(
                     fn, args, swarm_pos, motion_primitive["tstart"], motion_primitive["tend"]
                 )
-                print("choreographer.py - _motion_primitives2time_and_pos: swarm pos = ")
-                print(swarm_pos)
-                print("choreographer.py - _motion_primitives2time_and_pos: waypoints = ")
-                print(_waypoints)
                 for k, v in _waypoints.items():
                     waypoints[k] = v if k not in waypoints else waypoints[k] | v
 
@@ -560,16 +468,6 @@ class Choreographer:
         # of drones. Therefore, waypoints could contain positions for only some of the drones.
         # swarm_pos always tracks the current position of all drones. We also need the dictionary
         # instead of a list of positions in waypoints to track which drones have been moved.
-        print("choreographer.py - _primitive2waypoints: input fn_name = ")
-        print(fn_name)
-        print("choreographer.py - _primitive2waypoints: input swarm_pos = ")
-        print(swarm_pos)
-        print("choreographer.py - _primitive2waypoints: input tstart = ")
-        print(tstart)
-        print("choreographer.py - _primitive2waypoints: input tend = ")
-        print(tend)
-        print("choreographer.py - _primitive2waypoints: input limits = ")
-        print(limits)
         swarm_pos, waypoints = fn(args, swarm_pos, tstart, tend, limits)
         return swarm_pos, waypoints
 

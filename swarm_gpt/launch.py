@@ -46,14 +46,15 @@ def main(
         raise RuntimeError("OPENAI_API_KEY environment variable required, has not been set")
     # Get a list of all music titles available in the music directory
     music_dir = Path(__file__).resolve().parents[1] / "music"
-
+    
+    # submodules/crazyswarm/ros_ws/src/crazyswarm/launch/crazyflies.yaml
     crazyswarm_path = get_ros_package_path("crazyswarm", heuristic_search=True)
     config_file = crazyswarm_path / "launch/crazyflies.yaml"
 
     # Model IDs: "gpt-4o-2024-05-13", "gpt-3.5-turbo-0125", "gpt-4o-2024-05-13"
     backend = AppBackend(
         config_file=config_file,
-        music_dir=music_dir,
+        # music_dir=music_dir,
         strict_processing=strict,
         model_id=model_id,
         use_motion_primitives=use_motion_primitives,

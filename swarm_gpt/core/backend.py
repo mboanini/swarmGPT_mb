@@ -79,7 +79,6 @@ class AppBackend:
         self,
         config_file: Path,
         *,
-        music_dir: Path = Path(__file__).parents[2] / "music",
         strict_processing: bool = True,
         strict_drone_match: bool = True,
         model_id: str = "gpt-4o-2024-05-13",
@@ -107,73 +106,17 @@ class AppBackend:
         self.choreographer = Choreographer(
             config_file=config_file, model_id=model_id, use_motion_primitives=use_motion_primitives
         )
-        self.music_manager = MusicManager(music_dir)
         self.mode: Literal["preset", "real"] = "real"
         self._preset: None | str = None
         self._strict_processing = strict_processing
         self._strict_drone_match = strict_drone_match
-        if set(self.songs) & set(self.presets):
-            raise ValueError("Songs and presets must have unique names")
-
-    @property
-    def songs(self) -> list[str]:
-        """List of available songs."""
-        return self.music_manager.songs
+        # if set(self.songs) & set(self.presets):
+        #    raise ValueError("Songs and presets must have unique names")
 
     @property
     def presets(self) -> list[str]:
         """List of available presets."""
         return [s.name for s in (self.root_path / "swarm_gpt/data/presets").glob("*")]
-
-    @self_correct(n_retries=2)
-    def initial_prompt_no_music(self, text: str, *, response: str | None = None) -> list[dict[str, str]]:
-        """Set the song and generate the choreography.
-
-        Args:
-            song: Name of the song or preset to use.
-            response: Optional, predefined response. Used for testing.
-
-        Returns:
-            The chat history as a list of dictionaries with the role and content.
-        """
-        print("backend.py - initial_prompt: input response = ")
-        print(response)
-        print("backend.py - initial_prompt: input song = ")
-        print(text)
-        logger.info(f"Generating initial choreography for this prompt: {text}")
-        self.choreographer.reset_history()
-        prompt = self.choreographer.format_initial_prompt_no_music(text)
-        print("backend.py - initial_prompt: prompt = ")
-        print(prompt)
-
-        fixed_response = response is not None
-        # if preset := song in self.presets:  # Preset was provided == song è in self.presets? True/False => Se preset == True : ... elif...
-        if fixed_response:  # Response was provided, do not use LLM
-            logger.debug(f"Using predefined response: {response}")
-            self.choreographer.messages.append({"role": "assistant", "content": response})
-        else:  # Use LLM to generate the choreography
-            logger.debug(f"Using LLM to generate choreography for prompt: {text}")
-            response = self.choreographer.generate_choreography(prompt)
-            print("backend.py - initial_prompt: response = ")
-            print(response)
-
-        try:
-            self.waypoints = self.choreographer.response2waypoints(
-                response, music_info=music_info, strict=self._strict_processing
-            )
-            print("backend.py - initial_prompt: waypoints = ")
-            print(self.waypoints)
-        except LLMException as e:
-            # We do not want to retry if we are using a preset or a fixed response. This
-            # would use the LLM. We raise an error type that is not caught by
-            # self_correct to exit immediately.
-            if preset or fixed_response:
-                raise RuntimeError("Initial prompt failed") from e
-            raise e
-        logger.info("Successfully generated choreography")
-        print("backend.py - initial_prompt: output self.choreographer.messages = ")
-        print(self.choreographer.messages)
-        return self.choreographer.messages
 
     @self_correct(n_retries=2)
     def initial_prompt(self, song: str, *, response: str | None = None) -> list[dict[str, str]]:
@@ -186,38 +129,24 @@ class AppBackend:
         Returns:
             The chat history as a list of dictionaries with the role and content.
         """
-        print("backend.py - initial_prompt: input response = ")
-        print(response)
-        print("backend.py - initial_prompt: input song = ")
-        print(song)
         logger.info(f"Generating initial choreography for song: {song}")
-        song_name = self._load_song(song)
-        print("backend.py - initial_prompt: song_name = ")
-        print(song_name)
-        music_info = self.music_manager.extract_song_info()
-        print("backend.py - initial_prompt: music_info = ")
-        print(music_info)
         self.choreographer.reset_history()
-        prompt = self.choreographer.format_initial_prompt(song_name, music_info)
+        prompt = self.choreographer.format_initial_prompt(text)
         print("backend.py - initial_prompt: prompt = ")
         print(prompt)
 
         fixed_response = response is not None
-        if preset := song in self.presets:  # Preset was provided
-            logger.debug(f"Loading preset: {song}")
-            response = self.load_preset(song)
-        elif fixed_response:  # Response was provided, do not use LLM
-            logger.debug(f"Using predefined response: {response}")
-            self.choreographer.messages.append({"role": "assistant", "content": response})
-        else:  # Use LLM to generate the choreography
+        # if preset := song in self.presets:  # Preset was provided
+        if response is None:
             logger.debug(f"Using LLM to generate choreography for song: {song_name}")
             response = self.choreographer.generate_choreography(prompt)
-            print("backend.py - initial_prompt: response = ")
-            print(response)
+        else:
+            logger.debug(f"Using predefined response: {response}")
+            self.choreographer.messages.append({"role": "assistant", "content": response})
 
         try:
             self.waypoints = self.choreographer.response2waypoints(
-                response, music_info=music_info, strict=self._strict_processing
+                response, strict=self._strict_processing
             )
             print("backend.py - initial_prompt: waypoints = ")
             print(self.waypoints)
@@ -248,10 +177,9 @@ class AppBackend:
             logger.warning("No message provided, returning current history")
             return self.choreographer.messages
         prompt = self.choreographer.format_reprompt(message)
-        music_info = self.music_manager.extract_song_info()
         response = self.choreographer.generate_choreography(prompt)
         self.waypoints = self.choreographer.response2waypoints(
-            response, music_info=music_info, strict=self._strict_processing
+            response, strict=self._strict_processing
         )
         logger.info("Successfully generated choreography")
         return self.choreographer.messages
