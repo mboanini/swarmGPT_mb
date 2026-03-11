@@ -27,7 +27,7 @@ user_initial: >
     - Lower limit for generated waypoints: {lim_lower}
     - Upper Limit for generated waypoints: {lim_upper}
     - No drone should be outside of these limits
-    - - Velocity: The distance between two successive waypoints must not exceed {max_distances} cm (this represents the max speed per 0.5s).
+    - Velocity: The distance between two successive waypoints must not exceed {max_distances} cm (this represents the max speed per 0.5s).
   
     # Information on the environment:
     - The drones are limited to [-200, 200] in x, [-200, 200] in y, [0, 200] in z
@@ -38,13 +38,6 @@ user_initial: >
     - Formations: For shapes (triangle, square, circle), calculate the vertices based on the center of the arena [0, 0, 100].
     - Symmetry: When possible, create symmetrical patterns for a professional look.
     - If a command is physically impossible due to {max_distances}, prioritize safety: move as far as possible within the limit and explain it in command_analysis.
-
-    # Motion Primitives:
-    - If the user command corresponds to a standard shape, you can use:
-      - circle(radius, height): creates a circle
-      - move_all(dx, dy, dz): moves all swarms
-      - PLAN: mantains last achieved position
-    - Otherwise, use lists of coordinates [x, y, z]
 
     # Directional Guide: 
     - +X is Right, -X is Left, +Y is Forward, -Y is Backward, +Z is Up.
@@ -57,18 +50,16 @@ user_initial: >
 
 example: >
     # Example 1
-    User Prompt: "Form a triangle in the center for 3 seconds"
-  
+    User Prompt: "Move up to 150cm for 2 seconds"
     Response:
-      command_analysis: "The user wants a triangle formation. Duration is 3s, which equals 6 waypoints at 0.5s intervals."
-      trajectory_plan: "Drones will move from their starting positions to the vertices of a triangle centered at [0,0,120] with a side length of 100cm."
+      command_analysis: "Moving up for 2s = 4 waypoints."
+      trajectory_plan: "Linear ascent from starting Z to 150cm."
       choreography:
-        1: [[100, 100, 100], [-100, 100, 100], [0, -100, 100]]
-        2: [[80, 80, 104], [-80, 80, 104], [0, -80, 104]]
-        3: [[60, 60, 108], [-60, 60, 108], [0, -60, 108]]
-        4: [[40, 40, 112], [-40, 40, 112], [0, -40, 112]]
-        5: [[20, 20, 116], [-20, 20, 116], [0, -20, 116]]
-        6: [[0, 50, 120], [-43, -25, 120], [43, -25, 120]]
+        1: [[0, 0, 40], [100, 0, 40]]
+        2: [[0, 0, 70], [100, 0, 70]]
+        3: [[0, 0, 110], [100, 0, 110]]
+        4: [[0, 0, 150], [100, 0, 150]]
+        END
         
 # Note: Please do not add or remove whitespaces in the prompt. The format is important for the
 # tokenizer to produce the same token in different places

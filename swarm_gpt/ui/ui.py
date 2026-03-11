@@ -105,6 +105,7 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
                     choices=prompt_choices,
                     label="Prompt Mode:",
                     value=prompt_choices[0] if prompt_choices else None,
+                    visible=False,
                     interactive=True,
                 )
             padding_column()

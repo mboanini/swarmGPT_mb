@@ -82,7 +82,7 @@ class AppBackend:
         strict_processing: bool = True,
         strict_drone_match: bool = True,
         model_id: str = "gpt-4o-2024-05-13",
-        use_motion_primitives: bool = True,
+        use_motion_primitives: bool = False,
     ):
         """Initialize the backend by loading the music files and initializing the choreographer.
 

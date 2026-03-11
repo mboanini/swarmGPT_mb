@@ -5,11 +5,15 @@ system_initial: >
 
 user_initial: >
   Generate a choreography for {num_drones} drones based on this command: "{prompt}".
-  The choreography is composed of a sequence of {num_waypoints} steps. 
-  Each step represents a fixed time interval of 0.5 seconds.
+
+  # Timing and Steps:
+  - There is no fixed number of steps. The choreography duration must be determined by the actions requested.
+  - Each step represents a fixed time interval of 0.5 seconds.
+  - You must ensure the choreography is long enough to complete all requested movements, including necessary transitions.
 
   # Information on the drones:
   - Number of drones: {num_drones}
+  - Drone IDs: Use only the indices [1, 2, ...]. Never use -1, "all", or other placeholders.
   - Starting positions: {starting_pos}
   - Safety: Drones must NOT collide. Maintain safety distance at all times.
   - Limits: X and Y in [-200, 200], Z in [20, 200] (drones must not touch the ground).
@@ -45,7 +49,7 @@ user_initial: >
   The output must be a YAML string with:
   - command_analysis: How you interpreted the user request.
   - choreography_plan: The geometric strategy (which shapes, which order).
-  - choreography: The numbered list of steps (1 to {num_waypoints}) ending with 'END'.
+  - choreography: The numbered list of steps (1, 2, 3, ...) ending with 'END'.
 
 example: >
   User Prompt: "Form a circle at 120cm and then spiral up for 4 steps"
@@ -53,7 +57,7 @@ example: >
     command_analysis: "User wants a circle followed by a spiral. Total steps needed: 7."
     choreography_plan: "Step 1: Circle formation. Step 2: Transition. Steps 3-7: Spiral movement."
     choreography:
-      1: form_circle([0, 1, 2], 120)
+      1: form_circle([1, 2, 3], 120)
       2: PLAN
       3: spiral(5, 150)
       4: PLAN
