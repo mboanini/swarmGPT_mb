@@ -58,8 +58,8 @@ class Choreographer:
         self.num_drones = 0
         self.messages = []
         # Load prompts from file
-        prompt = "prompts_no_music"
-        # prompt = "motion_primitive_prompts" if self.use_motion_primitives else "prompts"
+        # prompt = "prompts_no_music"
+        prompt = "prompts_prim" if self.use_motion_primitives else "prompts_no_music"
         with open(Path(__file__).resolve().parents[1] / f"data/{prompt}.yaml", "r") as f:
             self.prompts = yaml.safe_load(f)
         self.load_drone_config(config_file)
@@ -140,23 +140,33 @@ class Choreographer:
         """
         # Convert to cm for LLM compatibility
         starting_pos = [(pos * 100).astype(int).tolist() for pos in self.starting_pos.values()]
-        wave_eqn = None
+        # wave_eqn = None
         if self.use_motion_primitives:
+            num_waypoints = 6
+            wave_eqn = ""
             # Load the YAML file
+            latex_file = Path(__file__).resolve().parents[1] / "data/latex_eqn.yaml"
+            with open(latex_file, "r") as file:
+                data = yaml.safe_load(file)
+                wave_eqn = data.get("wave", "")
+        else:
+            wave_eqn = None
             latex_file = Path(__file__).resolve().parents[1] / "data/latex_eqn.yaml"
             with open(latex_file, "r") as file:
                 data = yaml.safe_load(file)
                 wave_eqn = data.get("wave")
 
         prompt_kwargs = {
-            "user_command": user_command,
+            "prompt": user_command,
             "num_drones": self.num_drones,
             "starting_pos": starting_pos,
             "lim_lower": self.lim_lower * 100,
             "lim_upper": self.lim_upper * 100,
+            "max_distances": self.settings["axswarm"]["vel_max"] * 0.5,
+            "num_waypoints": num_waypoints,
             "wave_eqn": wave_eqn,
         }
-        return self.prompts["user_command_initial"].format(**prompt_kwargs)
+        return self.prompts["user_initial"].format(**prompt_kwargs)
 
     def _call_openai(self, messages: list[dict[str, str]]) -> str:
         response = client.chat.completions.create(
@@ -246,22 +256,26 @@ class Choreographer:
             raise LLMResponseProcessingError(f"Choreography plan is missing primitive at {missing}")
 
         motion_primitives = {}
-        for i in choreography:
+        for i in sorted(choreography.keys()):
+        # for i in choreography:
             motion_primitives[i] = []
             moves = choreography[i].strip(" ;").split(";")
             for move in moves:
+                move = move.strip()
                 fn_name = move.split("(")[0].strip(" -\n")
                 if fn_name == "PLAN":
                     motion_primitives[i].append({fn_name: ()})
                     continue
-                if fn_name not in motion_primitives_collection:
+                if fn_name.lower() not in motion_primitives_collection:
                     raise LLMResponseProcessingError(
                         f"Unknown motion primitive '{fn_name}' at timestep {i}"
                     )
                 # Get the arguments after "(", remove comments, and add a , before the closing ) to
                 # enforce that one argument functions are length 1 tuples.
                 try:
-                    fn_args = ast.literal_eval("(" + move.split("(")[1].split("#")[0][:-1] + ",)")
+                    # fn_args = ast.literal_eval("(" + move.split("(")[1].split("#")[0][:-1] + ",)")
+                    raw_args = move.split("(")[1].split(")")[0]
+                    fn_args = ast.literal_eval("(" + raw_args + ",)")
                 except (SyntaxError, ValueError) as e:
                     raise LLMFormatError(
                         f"Cannot interpret arguments of '{move}' at timestep {i}. Failed with "

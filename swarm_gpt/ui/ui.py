@@ -78,23 +78,36 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
     # Define the UI
     with gr.Blocks(theme=gr.themes.Monochrome()) as ui:
         gr.Markdown(
-            """ <div align="center"> <font size = "50"> SwarmGPT-Primitive""", elem_id="swarmgpt"
+            # """ <div align="center"> <font size = "50"> SwarmGPT-Primitive""", elem_id="swarmgpt"
+            """ <div align="center"> <font size = "50"> SwarmGPT-Command"""
         )
         # Initial window with song selection
         with gr.Row():
             padding_column()
             with gr.Column():
-                song_input = gr.Dropdown(
-                    choices=backend.songs + backend.presets, label="Select song"
+                # song_input = gr.Dropdown(
+                #     choices=backend.songs + backend.presets, label="Select song"
+                # )
+                user_prompt_input = gr.Textbox(
+                    label = "What should do drones?",
+                    placeholder = "E.g.: Form a triangle at 1.5m high for 10 seconds...",
+                    lines=2
                 )
             with gr.Column():
                 prompt_choices = list(backend.choreographer.prompts.keys())
-                gr.Dropdown(
+                # gr.Dropdown(
+                #     choices=prompt_choices,
+                #     label="Enter prompt type:",
+                #     visible=False,
+                #     interactive=True,
+                # )
+                prompt_mode = gr.Dropdown(
                     choices=prompt_choices,
-                    label="Enter prompt type:",
-                    visible=False,
+                    label="Prompt Mode:",
+                    value=prompt_choices[0] if prompt_choices else None,
                     interactive=True,
                 )
+            padding_column()
         # Interface during data processing and simulation
         with gr.Row():
             with gr.Column():
@@ -118,17 +131,23 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
                 alter_button = gr.Button("Refine/Modify the choreography", visible=False)
             padding_column()
 
+        # with gr.Row():
+        #     padding_column()
+        #     with gr.Column():
+        #         select_song_button = gr.Button("Choose another song", visible=False)
+        #     padding_column()
+
         with gr.Row():
             padding_column()
             with gr.Column():
-                select_song_button = gr.Button("Choose another song", visible=False)
+                new_command_button = gr.Button("New Command", visible=False)
             padding_column()
 
         with gr.Row():
             padding_column()
             with gr.Column():
                 start_button = gr.Button("Send selections to LLM", visible=False)
-                deploy_button = gr.Button("Let the Crazyflies dance", visible=False)
+                deploy_button = gr.Button("Let the Crazyflies move", visible=False)
                 save_preset_button = gr.Button("Save preset", visible=False)
                 show_output = gr.Checkbox(
                     label="Display conversation with LLM",
@@ -139,17 +158,32 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
                 )
             padding_column()
 
+        user_prompt_input.change(
+            lambda x: gr.update(visible=len(x) > 0),
+            inputs = [user_prompt_input],
+            outputs = [start_button]
+        )
+
         # Define the UI control flow when the user interacts with the UI elements
         # Song selection flow. On select, the start button and the show output checkbox appear.
-        song_input.select(update_visibility([True, True]), [], [start_button, show_output])
+        # song_input.select(update_visibility([True, True]), [], [start_button, show_output])
         # Start button flow. On click, the song input and start button disappear
         # The choreo message appears
         start_button_flow = start_button.click(
-            update_visibility([False, False, True]), [], [song_input, start_button, choreo_msg]
+            # update_visibility([False, False, True]), [], [song_input, start_button, choreo_msg]
+            update_visibility([False, False, True, True]), 
+            [], 
+            [user_prompt_input, start_button, choreo_msg, show_output]
         )
         # The song is handed to the backend start function, and the output of `start` is piped into
         # the chatbot.
-        start_button_flow = start_button_flow.success(backend.initial_prompt, song_input, chatbot)
+        start_button_flow = start_button_flow.success(
+            backend.initial_prompt, 
+            #song_input, 
+            #chatbot
+            inputs=[user_prompt_input],
+            outputs=chatbot
+        )
         # The choreo message disappears and the simulate, modify and select song buttons appear
         start_button_flow = start_button_flow.success(
             update_visibility([False, True, True, True, True, True]),
@@ -158,7 +192,7 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
                 choreo_msg,
                 sim_button,
                 alter_button,
-                select_song_button,
+                new_command_button,
                 deploy_button,
                 save_preset_button,
             ],
@@ -215,7 +249,7 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
                 replay_sim_button,
                 alter_button,
                 deploy_button,
-                select_song_button,
+                new_command_button,
                 progress_bar,
             ],
         )
@@ -235,7 +269,9 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
         )
 
         replay_sim_flow = replay_sim_flow.success(
-            update_visibility([False, True]), [], [replay_msg, select_song_button]
+            update_visibility([False, True]), [], [replay_msg, new_command_button]
         )
-        select_song_button.click(None, js="window.location.reload()")
+        # select_song_button.click(None, js="window.location.reload()")
+        new_command_button.click(None, js="window.location.reload()")
+
     return ui
