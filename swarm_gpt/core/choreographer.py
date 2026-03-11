@@ -142,7 +142,7 @@ class Choreographer:
         starting_pos = [(pos * 100).astype(int).tolist() for pos in self.starting_pos.values()]
         # wave_eqn = None
         if self.use_motion_primitives:
-            num_waypoints = 6
+            # num_waypoints = 6
             wave_eqn = ""
             # Load the YAML file
             latex_file = Path(__file__).resolve().parents[1] / "data/latex_eqn.yaml"
@@ -163,7 +163,7 @@ class Choreographer:
             "lim_lower": self.lim_lower * 100,
             "lim_upper": self.lim_upper * 100,
             "max_distances": self.settings["axswarm"]["vel_max"] * 0.5,
-            "num_waypoints": num_waypoints,
+            # "num_waypoints": num_waypoints,
             "wave_eqn": wave_eqn,
         }
         return self.prompts["user_initial"].format(**prompt_kwargs)
