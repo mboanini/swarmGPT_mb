@@ -39,6 +39,13 @@ user_initial: >
     - Symmetry: When possible, create symmetrical patterns for a professional look.
     - If a command is physically impossible due to {max_distances}, prioritize safety: move as far as possible within the limit and explain it in command_analysis.
 
+    # Motion Primitives:
+    - If the user command corresponds to a standard shape, you can use:
+      - circle(radius, height): creates a circle
+      - move_all(dx, dy, dz): moves all swarms
+      - PLAN: mantains last achieved position
+    - Otherwise, use lists of coordinates [x, y, z]
+
     # Directional Guide: 
     - +X is Right, -X is Left, +Y is Forward, -Y is Backward, +Z is Up.
 

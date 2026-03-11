@@ -198,13 +198,18 @@ def simulate_axswarm(
         print(f"Errore nella generazione del grafico: {e}")
     # --------------------------------------
 
+    states_array = np.stack(states) if len(states) > 0 else np.zeros((1, sim.n_drones, 6))
+    controls_array = np.stack(controls) if len(controls) > 0 else np.zeros((1, sim.n_drones, 6))
+
     sim_log = {
         "num_drones": sim.n_drones,
         "log_freq": solver_settings.freq,
         "sim_freq": sim.freq,
         "timestamps": np.arange(n_steps) / sim.control_freq,
-        "states": np.array(states),
-        "controls": np.array(controls),
+        # "states": np.array(states),
+        # "controls": np.array(controls),
+        "states": states_array,
+        "controls": controls_array,
         "waypoints": waypoints,
         "simulation_freq": sim.freq,
         "amswarm_every_n_steps": solve_every_n_steps,

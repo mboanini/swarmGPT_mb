@@ -119,7 +119,7 @@ class AppBackend:
         return [s.name for s in (self.root_path / "swarm_gpt/data/presets").glob("*")]
 
     @self_correct(n_retries=2)
-    def initial_prompt(self, song: str, *, response: str | None = None) -> list[dict[str, str]]:
+    def initial_prompt(self, text: str, *, response: str | None = None) -> list[dict[str, str]]:
         """Set the song and generate the choreography.
 
         Args:
@@ -129,16 +129,17 @@ class AppBackend:
         Returns:
             The chat history as a list of dictionaries with the role and content.
         """
-        logger.info(f"Generating initial choreography for song: {song}")
+        logger.info(f"Generating initial choreography for user command: {text}")
         self.choreographer.reset_history()
         prompt = self.choreographer.format_initial_prompt(text)
         print("backend.py - initial_prompt: prompt = ")
         print(prompt)
 
         fixed_response = response is not None
+        preset = False
         # if preset := song in self.presets:  # Preset was provided
         if response is None:
-            logger.debug(f"Using LLM to generate choreography for song: {song_name}")
+            logger.debug(f"Using LLM to generate choreography for user command: {text}")
             response = self.choreographer.generate_choreography(prompt)
         else:
             logger.debug(f"Using predefined response: {response}")
@@ -246,7 +247,7 @@ class AppBackend:
                 make_smoothing_spline(t, controls[:, j], lam=lam) for j in range(3)
             ]
         if gui:  # Rerun the simulation of the resulting trajectories with GUI
-            simulate_spline(self.splines, self.settings, t[-1], self.music_manager, gui)
+            simulate_spline(self.splines, self.settings, t[-1], getattr(self, "music_manager", None), gui)
         logger.info("Simulation successful")
         return sim_data
 
