@@ -275,4 +275,35 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
         # select_song_button.click(None, js="window.location.reload()")
         new_command_button.click(None, js="window.location.reload()")
 
+        # reset
+        def reset_ui_state():
+            return [
+                gr.update(value="", visible=True),     # user_prompt_input
+                gr.update(visible=False),              # start_button
+                gr.update(visible=False),              # sim_button
+                gr.update(visible=False),              # alter_button
+                gr.update(visible=False),              # new_command_button
+                gr.update(visible=False),              # deploy_button
+                gr.update(visible=False),              # save_preset_button
+                gr.update(visible=False, value=[]),    # chatbot (svuota cronologia visiva)
+                gr.update(visible=False),              # choreo_msg
+                gr.update(visible=False)               # show_output
+            ]
+
+        ui_elements_to_reset = [
+            user_prompt_input, start_button, sim_button, alter_button, 
+            new_command_button, deploy_button, save_preset_button, 
+            chatbot, choreo_msg, show_output
+        ]
+
+        new_command_button.click(
+            fn=backend.reset_data, # clean vars
+            inputs=[],
+            outputs=[]
+        ).success(
+            fn=reset_ui_state,    
+            inputs=[],
+            outputs=ui_elements_to_reset
+        )
+
     return ui

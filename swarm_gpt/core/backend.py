@@ -198,6 +198,10 @@ class AppBackend:
             A collection of data from the simulation.
         """
         logger.info("Simulating trajectories with axswarm")
+        # 1. RESET PREVENTIVO: Pulisci sempre prima di iniziare
+        self.splines.clear()
+        if hasattr(self, 'sim_results'):
+            del self.sim_results
         assert self.waypoints is not None, "Please generate a choreography first"
 
         for key, data, total in simulate_axswarm(self.waypoints, self.settings, gui=False):
@@ -209,37 +213,37 @@ class AppBackend:
         t = sim_data["timestamps"][::10]
         lam = 0.1  # TODO: Adjust the smoothing parameters
         self.splines.clear()
-            # --- NUOVA PARTE PER IL GRAFICO ---
-        import matplotlib.pyplot as plt # Assicurati che sia importato
+        # --- NUOVA PARTE PER IL GRAFICO ---
+        # import matplotlib.pyplot as plt # Assicurati che sia importato
         
         # Prendiamo il primo drone (indice 0) e l'asse X (indice 0) per l'esempio
-        drone_idx = 0
-        axis_idx = 0 # 0=X, 1=Y, 2=Z
-        controls = sim_data["controls"][:, drone_idx, axis_idx]
+        # drone_idx = 0
+        # axis_idx = 0 # 0=X, 1=Y, 2=Z
+        # controls = sim_data["controls"][:, drone_idx, axis_idx]
         
         # Creazione della spline (questo lo fai già)
-        spline_x = make_smoothing_spline(t, controls, lam=lam)
+        # spline_x = make_smoothing_spline(t, controls, lam=lam)
         
-        # Generiamo punti densi per vedere la curva fluida
-        t_smooth = np.linspace(t[0], t[-1], 500)
-        x_smooth = spline_x(t_smooth)
+        # # Generiamo punti densi per vedere la curva fluida
+        # t_smooth = np.linspace(t[0], t[-1], 500)
+        # x_smooth = spline_x(t_smooth)
         
         # Creazione del Grafico
-        plt.figure(figsize=(10, 5))
-        plt.plot(t, controls, 'ro', markersize=4, label='Waypoint simulati (AXSwarm)')
-        plt.plot(t_smooth, x_smooth, 'b-', linewidth=2, label=f'Spline generata (lam={lam})')
+        # plt.figure(figsize=(10, 5))
+        # plt.plot(t, controls, 'ro', markersize=4, label='Waypoint simulati (AXSwarm)')
+        # plt.plot(t_smooth, x_smooth, 'b-', linewidth=2, label=f'Spline generata (lam={lam})')
         
-        plt.title(f'Trasformazione Waypoints in Traiettoria - Drone {drone_idx}')
-        plt.xlabel('Tempo [s]')
-        plt.ylabel('Posizione [m]')
-        plt.legend()
-        plt.grid(True, alpha=0.3)
+        # plt.title(f'Trasformazione Waypoints in Traiettoria - Drone {drone_idx}')
+        # plt.xlabel('Tempo [s]')
+        # plt.ylabel('Posizione [m]')
+        # plt.legend()
+        # plt.grid(True, alpha=0.3)
         
-        # Salvataggio
-        plot_path = "confronto_spline.png"
-        plt.savefig(plot_path)
-        plt.close() # Chiudi per non occupare memoria
-        print(f"Grafico della spline salvato in: {plot_path}")
+        # # Salvataggio
+        # plot_path = "confronto_spline.png"
+        # plt.savefig(plot_path)
+        # plt.close() # Chiudi per non occupare memoria
+        # print(f"Grafico della spline salvato in: {plot_path}")
         # ----------------------------------
         for i, drone in self.choreographer.agents.items():
             controls = sim_data["controls"][:, i, :3]
@@ -333,3 +337,25 @@ class AppBackend:
             song = song.split("|")[0].strip()
         self.music_manager.song = song
         return song
+
+    def reset_data(self):
+        """Ripristina lo stato interno del backend per una nuova sessione."""
+        logger.info("Resetting backend data for a new command...")
+        
+        # 1. Svuota i comandi di alto livello e le traiettorie ottimizzate
+        self.waypoints = None
+        self.full_trajectory = None
+
+        self.splines.clear()
+        
+
+        if hasattr(self, 'sim_results'):
+            del self.sim_results
+
+        # 2. Resetta la cronologia dei messaggi dell'LLM tramite il coreografo
+        # Questo è fondamentale per far sì che l'LLM non faccia confusione
+        # con i comandi della sessione precedente.
+        self.choreographer.reset_history()
+                
+        logger.info("Backend reset completato.")
+    
