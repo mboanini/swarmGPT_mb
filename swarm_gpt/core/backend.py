@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import pickle
+import subprocess
+import sys
+import tempfile
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
@@ -14,9 +19,8 @@ import yaml
 from scipy.interpolate import make_smoothing_spline
 
 from swarm_gpt.core import Choreographer, DroneController
-from swarm_gpt.core.sim import simulate_axswarm, simulate_spline
+from swarm_gpt.core.sim import simulate_axswarm
 from swarm_gpt.exception import LLMException
-from swarm_gpt.utils import MusicManager
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -30,20 +34,14 @@ colors = [
     [0.0, 1.0, 0.5],
 ]
 
-P = ParamSpec("P")  # Represents arbitrary parameters
-R = TypeVar("R")  # Represents the return type
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 def self_correct(n_retries: int) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    """Create a decorator that retries a function n times if it fails.
-
-    Args:
-        n_retries: Number of times to retry the function
-    """
+    """Create a decorator that retries a function n times if it fails."""
 
     def decorator(fn: Callable[P, R]) -> Callable[P, R]:
-        """Decorator that retries a function n times if it fails."""
-
         @wraps(fn)
         def wrapper(self: AppBackend, *args: P.args, **kwargs: P.kwargs) -> R:
             assert isinstance(self, AppBackend), "self_correct decorator must be used on AppBackend"
@@ -57,8 +55,6 @@ def self_correct(n_retries: int) -> Callable[[Callable[P, R]], Callable[P, R]]:
                         message = "The provided response failed with the following error:"
                         message += f"\n{error_message}\n\n"
                         message += "Analyze the error, re-read the instructions and try again."
-                        # Use the underlying, undecorated reprompt function to avoid infinite
-                        # recursion.
                         return self.reprompt.__wrapped__(self, message)
                     except LLMException as inner_e:
                         if i == n_retries - 1:
@@ -70,6 +66,96 @@ def self_correct(n_retries: int) -> Callable[[Callable[P, R]], Callable[P, R]]:
         return wrapper
 
     return decorator
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Subprocess-based visualizer
+#
+# MuJoCo/OpenGL non supporta reinizializzazione nello stesso processo dopo
+# sim.close(). La soluzione è eseguire ogni sessione del visualizzatore in un
+# NUOVO subprocess figlio che parte da zero.
+#
+# Comunicazione: le splines vengono serializzate con pickle in un file
+# temporaneo che il subprocess legge. Nessun fork (usiamo subprocess.Popen
+# con python -c), quindi non ereditiamo lo stato OpenGL del padre.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Script Python che gira nel subprocess figlio.
+# Viene passato come stringa a `python -c "..."`.
+_VIZ_SCRIPT = """
+import sys, pickle, logging
+logging.basicConfig(level=logging.WARNING)
+
+data_path = sys.argv[1]
+with open(data_path, "rb") as f:
+    payload = pickle.load(f)
+
+splines   = payload["splines"]    # dict drone -> list of scipy splines
+settings  = payload["settings"]
+duration  = payload["duration"]
+
+from collections import deque
+import time
+import numpy as np
+from crazyflow.control import Control
+from crazyflow.sim import Physics, Sim
+from swarm_gpt.utils.utils import draw_line
+
+fps          = 60
+amswarm_freq = settings["axswarm"]["freq"]
+
+sim = Sim(
+    n_worlds=1,
+    n_drones=len(splines),
+    physics=Physics.analytical,
+    control=Control.state,
+    freq=settings["sim_freq"],
+    attitude_freq=settings["attitude_freq"],
+    state_freq=settings["state_freq"],
+    device="cpu",
+)
+sim.max_visual_geom = 100_000
+sim.reset()
+sim.state_control(__import__("numpy").random.random((1, sim.n_drones, 13)))
+sim.step(sim.freq // sim.control_freq)
+sim.reset()
+
+vel_splines = {k: [s.derivative() for s in v] for k, v in splines.items()}
+pos = np.array([[s(0) for s in splines[j]] for j in splines])[None, ...]
+sim.data = sim.data.replace(
+    states=sim.data.states.replace(pos=sim.data.states.pos.at[...].set(pos))
+)
+
+rng   = np.random.default_rng(0)
+rgbas = rng.random((sim.n_drones, 4))
+rgbas[..., 3] = 1
+swarm_pos = [deque(maxlen=100) for _ in range(sim.n_drones)]
+
+tstart   = time.time()
+n_steps  = int(duration * sim.control_freq)
+
+try:
+    for i in range(n_steps):
+        ct = i / sim.control_freq
+        des_pos = np.array([[s(ct) for s in splines[j]] for j in splines])
+        des_vel = np.array([[s(ct) for s in vel_splines[j]] for j in splines])
+        controls = np.concatenate(
+            (des_pos, des_vel, np.zeros((sim.n_drones, 7))), axis=-1
+        )[None, ...]
+        sim.state_control(controls)
+        sim.step(sim.freq // sim.control_freq)
+
+        if ((i * fps) % sim.control_freq) < fps:
+            for j, dq in enumerate(swarm_pos):
+                dq.append(np.asarray(sim.data.states.pos[0, j]))
+                draw_line(sim, np.array(dq), rgba=rgbas[j % len(rgbas)], min_size=2, max_size=5)
+            sim.render()
+            dt = ct - (time.time() - tstart)
+            if dt > 0:
+                time.sleep(dt)
+finally:
+    sim.close()
+"""
 
 
 class AppBackend:
@@ -84,98 +170,115 @@ class AppBackend:
         model_id: str = "gpt-4o-2024-05-13",
         use_motion_primitives: bool = False,
     ):
-        """Initialize the backend by loading the music files and initializing the choreographer.
-
-        Args:
-            config_file: Path to the config file.
-            music_dir: Path to the music directory.
-            strict_processing: Flag to raise an error on waypoint collisions.
-            strict_drone_match: Flag to raise an error when preset drones do not match the current
-                swarm.
-            model_id: The OpenAI GPT model ID.
-            use_motion_primitives: If we want LLM to use motion primitives for choreography
-        """
         self.root_path = Path(__file__).resolve().parents[2]
         with open(self.root_path / "swarm_gpt/data/settings.yaml", "r") as f:
             self.settings = yaml.safe_load(f)
-        # Initialize drone control elements
-        self.waypoints = None  # High-level LLM commands
-        self.splines = {}  # Low-level optimized commands from axswarm
-        self.drone_controller = DroneController(20)  # Controller for the Crazyflie drones
-        # Initialize chat elements
+
+        self.waypoints = None
+        self.splines: dict = {}
+        self.drone_controller = DroneController(20)
         self.choreographer = Choreographer(
-            config_file=config_file, model_id=model_id, use_motion_primitives=use_motion_primitives
+            config_file=config_file,
+            model_id=model_id,
+            use_motion_primitives=use_motion_primitives,
         )
         self.mode: Literal["preset", "real"] = "real"
         self._preset: None | str = None
         self._strict_processing = strict_processing
         self._strict_drone_match = strict_drone_match
-        # if set(self.songs) & set(self.presets):
-        #    raise ValueError("Songs and presets must have unique names")
+
+        # Subprocess visualizer state
+        self._viz_proc: subprocess.Popen | None = None
+        self._viz_data_path: str | None = None   # path del file pickle temporaneo
+
+    # ── Subprocess visualizer helpers ─────────────────────────────────────────
+
+    def _stop_viz(self) -> None:
+        """Terminate the visualizer subprocess and clean up the temp file."""
+        if self._viz_proc is not None:
+            if self._viz_proc.poll() is None:          # ancora in esecuzione
+                logger.info("Terminating visualizer subprocess (pid=%d)…", self._viz_proc.pid)
+                self._viz_proc.terminate()
+                try:
+                    self._viz_proc.wait(timeout=4)
+                except subprocess.TimeoutExpired:
+                    logger.warning("Visualizer did not exit — killing.")
+                    self._viz_proc.kill()
+                    self._viz_proc.wait()
+            self._viz_proc = None
+
+        if self._viz_data_path and os.path.exists(self._viz_data_path):
+            try:
+                os.unlink(self._viz_data_path)
+            except OSError:
+                pass
+            self._viz_data_path = None
+
+    def _start_viz(self, splines: dict, duration: float) -> None:
+        """Kill any existing visualizer, serialize splines to disk, launch new subprocess."""
+        self._stop_viz()
+
+        # Serializza le splines in un file temporaneo (pickle supporta oggetti scipy)
+        payload = {
+            "splines": {k: list(v) for k, v in splines.items()},
+            "settings": dict(self.settings),
+            "duration": duration,
+        }
+        fd, tmp_path = tempfile.mkstemp(suffix=".pkl", prefix="swarmgpt_viz_")
+        try:
+            with os.fdopen(fd, "wb") as f:
+                pickle.dump(payload, f)
+        except Exception:
+            os.unlink(tmp_path)
+            raise
+
+        self._viz_data_path = tmp_path
+
+        # Lancia un processo Python FRESCO — nessuna eredità del contesto OpenGL
+        env = os.environ.copy()
+        self._viz_proc = subprocess.Popen(
+            [sys.executable, "-c", _VIZ_SCRIPT, tmp_path],
+            env=env,
+            # Non bloccare stdout/stderr: lascia che i log appaiano nel terminale
+            stdout=None,
+            stderr=None,
+        )
+        logger.info("Visualizer subprocess started (pid=%d).", self._viz_proc.pid)
+
+    # ── Core methods ──────────────────────────────────────────────────────────
 
     @property
     def presets(self) -> list[str]:
-        """List of available presets."""
         return [s.name for s in (self.root_path / "swarm_gpt/data/presets").glob("*")]
 
     @self_correct(n_retries=2)
     def initial_prompt(self, text: str, *, response: str | None = None) -> list[dict[str, str]]:
-        """Set the song and generate the choreography.
-
-        Args:
-            song: Name of the song or preset to use.
-            response: Optional, predefined response. Used for testing.
-
-        Returns:
-            The chat history as a list of dictionaries with the role and content.
-        """
-        logger.info(f"Generating initial choreography for user command: {text}")
+        logger.info("Generating initial choreography for: %s", text)
         self.choreographer.reset_history()
         prompt = self.choreographer.format_initial_prompt(text)
-        print("backend.py - initial_prompt: prompt = ")
-        print(prompt)
 
         fixed_response = response is not None
         preset = False
-        # if preset := song in self.presets:  # Preset was provided
         if response is None:
-            logger.debug(f"Using LLM to generate choreography for user command: {text}")
             response = self.choreographer.generate_choreography(prompt)
         else:
-            logger.debug(f"Using predefined response: {response}")
             self.choreographer.messages.append({"role": "assistant", "content": response})
 
         try:
             self.waypoints = self.choreographer.response2waypoints(
                 response, strict=self._strict_processing
             )
-            print("backend.py - initial_prompt: waypoints = ")
-            print(self.waypoints)
         except LLMException as e:
-            # We do not want to retry if we are using a preset or a fixed response. This
-            # would use the LLM. We raise an error type that is not caught by
-            # self_correct to exit immediately.
             if preset or fixed_response:
                 raise RuntimeError("Initial prompt failed") from e
             raise e
         logger.info("Successfully generated choreography")
-        print("backend.py - initial_prompt: output self.choreographer.messages = ")
-        print(self.choreographer.messages)
         return self.choreographer.messages
 
     @self_correct(n_retries=3)
     def reprompt(self, message: str) -> list[dict[str, str]]:
-        """Reprompt the LLM to generate new waypoints based on the previous choreography.
-
-        Args:
-            message: The reprompt.
-
-        Returns:
-            The chat history as a list of dictionaries with the role and content.
-        """
-        logger.info(f"Reprompting with message: {message}")
+        logger.info("Reprompting with: %s", message)
         if message == "":
-            logger.warning("No message provided, returning current history")
             return self.choreographer.messages
         prompt = self.choreographer.format_reprompt(message)
         response = self.choreographer.generate_choreography(prompt)
@@ -185,96 +288,49 @@ class AppBackend:
         logger.info("Successfully generated choreography")
         return self.choreographer.messages
 
-    def simulate(self: Any, gui: bool = True) -> dict[str, Any]:
-        """Run the simulation with waypoints generated by the choreographer.
-
-        Before the simulation is run, the waypoints are interpolated by axswarm to ensure that the
-        trajectories are collision-free.
-
-        Args:
-            gui: Whether to show the GUI.
-
-        Returns:
-            A collection of data from the simulation.
-        """
+    def simulate(self, gui: bool = True):
+        """Run axswarm, build splines, then launch visualizer in a fresh subprocess."""
         logger.info("Simulating trajectories with axswarm")
-        # 1. RESET PREVENTIVO: Pulisci sempre prima di iniziare
         self.splines.clear()
-        if hasattr(self, 'sim_results'):
+        if hasattr(self, "sim_results"):
             del self.sim_results
         assert self.waypoints is not None, "Please generate a choreography first"
 
         sim_data = None
-
         for key, data, total in simulate_axswarm(self.waypoints, self.settings, gui=False):
             if key == "progress":
                 yield key, data, total
             else:
                 sim_data = data
-                break
+
         assert sim_data is not None, "simulate_axswarm returned no data"
 
         t = sim_data["timestamps"][::10]
-        lam = 0.1  # TODO: Adjust the smoothing parameters
+        lam = 0.1
         self.splines.clear()
-        # --- NUOVA PARTE PER IL GRAFICO ---
-        # import matplotlib.pyplot as plt # Assicurati che sia importato
-        
-        # Prendiamo il primo drone (indice 0) e l'asse X (indice 0) per l'esempio
-        # drone_idx = 0
-        # axis_idx = 0 # 0=X, 1=Y, 2=Z
-        # controls = sim_data["controls"][:, drone_idx, axis_idx]
-        
-        # Creazione della spline (questo lo fai già)
-        # spline_x = make_smoothing_spline(t, controls, lam=lam)
-        
-        # # Generiamo punti densi per vedere la curva fluida
-        # t_smooth = np.linspace(t[0], t[-1], 500)
-        # x_smooth = spline_x(t_smooth)
-        
-        # Creazione del Grafico
-        # plt.figure(figsize=(10, 5))
-        # plt.plot(t, controls, 'ro', markersize=4, label='Waypoint simulati (AXSwarm)')
-        # plt.plot(t_smooth, x_smooth, 'b-', linewidth=2, label=f'Spline generata (lam={lam})')
-        
-        # plt.title(f'Trasformazione Waypoints in Traiettoria - Drone {drone_idx}')
-        # plt.xlabel('Tempo [s]')
-        # plt.ylabel('Posizione [m]')
-        # plt.legend()
-        # plt.grid(True, alpha=0.3)
-        
-        # # Salvataggio
-        # plot_path = "confronto_spline.png"
-        # plt.savefig(plot_path)
-        # plt.close() # Chiudi per non occupare memoria
-        # print(f"Grafico della spline salvato in: {plot_path}")
-        # ----------------------------------
         for i, drone in self.choreographer.agents.items():
             controls = sim_data["controls"][:, i, :3]
             self.splines[drone] = [
                 make_smoothing_spline(t, controls[:, j], lam=lam) for j in range(3)
             ]
-        if gui:  # Rerun the simulation of the resulting trajectories with GUI
-            simulate_spline(
-                self.splines, 
-                self.settings, 
-                t[-1], 
-                getattr(self, "music_manager", None), 
-                gui)
+
+        if gui:
+            self._start_viz(self.splines, float(t[-1]))
+
         logger.info("Simulation successful")
         return sim_data
 
+    def replay(self) -> None:
+        """Replay the last simulation without re-running axswarm."""
+        assert self.splines, "Please run Simulate first before replaying."
+        assert self.waypoints is not None, "Waypoints missing."
+        duration = float(max(wp[-1, 0] for wp in self.waypoints.values()))
+        logger.info("Starting replay (duration=%.2f s)", duration)
+        self._start_viz(self.splines, duration)
+
     def deploy(self, drone_ids: list[int] | None = None):
-        """Run the Crazyflie drones with waypoints generated by the choreographer.
-
-        We call the waypoint_helpers.py script from the Crazyflie ROS package to run the drones.
-
-        Returns:
-            The chat history as a list of prompts and answers.
-        """
         logger.info("Deploying drones")
         assert self.splines, "Please run the simulation first!"
-        # If a deploy version of the song is present, play it
         if not self.drone_controller._ros_running:
             raise RuntimeError("ROS is not running. Please start ROS before deploying.")
 
@@ -285,12 +341,13 @@ class AppBackend:
 
         for i, drone in enumerate(self.drone_controller.swarm.allcfs.crazyfliesById.values()):
             drone.setLEDColor(*colors[i % len(colors)])
+
         original_song = self.music_manager.song
         duration = next(iter(self.waypoints.values()))[-1, 0]
         try:
             self.music_manager.song = original_song + "[deploy]"
         except AssertionError:
-            ...
+            pass
         self.drone_controller.takeoff(target_height=1.0, duration=3.0)
         self.music_manager.play()
         self.drone_controller.run_spline_trajectories(self.splines, duration=duration)
@@ -299,11 +356,6 @@ class AppBackend:
         logger.info("Deployment successful")
 
     def load_preset(self, preset_id: str) -> list[dict[str, str]]:
-        """Load a preset response.
-
-        Args:
-            preset_id: Name of the preset.
-        """
         assert preset_id, "Please select a valid preset"
         assert preset_id in self.presets, "No preset for this song"
         preset_path = self.root_path / "swarm_gpt/data/presets" / preset_id
@@ -319,12 +371,11 @@ class AppBackend:
             meta = json.load(f)
         if meta["use_motion_primitives"] != self.choreographer.use_motion_primitives:
             raise ValueError("Preset was generated with a different use_motion_primitives setting")
-        assert history[-1]["role"] == "assistant", "Last message in history is not a response"
+        assert history[-1]["role"] == "assistant"
         self.choreographer.messages = history
         return history[-1]["content"]
 
     def save_preset(self):
-        """Save the preset."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         preset_name = self.music_manager.song + f" | {self.choreographer.num_drones} | {timestamp}"
         path = self.root_path / "swarm_gpt/data/presets" / preset_name
@@ -340,49 +391,18 @@ class AppBackend:
         if self.waypoints is not None:
             np.save(path / "waypoints.npy", self.waypoints)
 
-    def _load_song(self, song: str) -> tuple[str, str]:
-        """Load the song on the music manager."""
-        if song in self.presets:
-            song = song.split("|")[0].strip()
-        self.music_manager.song = song
-        return song
-
-    def replay(self) -> None:
-        """Replay the last simulation WITHOUT re-running axswarm.
- 
-        Raises:
-            AssertionError: if no splines are available yet.
-        """
-        assert self.splines, "Please run Simulate first before replaying."
-        logger.info("Replaying last simulation")
- 
-        # Recompute duration from waypoints (last timestamp of any drone)
-        duration = max(
-            wp[-1, 0] for wp in self.waypoints.values()
-        ) if self.waypoints is not None else 10.0
- 
-        simulate_spline(
-            self.splines,
-            self.settings,
-            duration,
-            getattr(self, "music_manager", None),
-            True,
-        )
-        logger.info("Replay finished")
-
     def reset_data(self) -> None:
-        """Reset internal state for a fresh command session."""
+        """Terminate visualizer subprocess, then reset all session state."""
         logger.info("Resetting backend data for a new command...")
- 
+
+        # Termina il subprocess PRIMA di liberare i dati
+        self._stop_viz()
+
         self.waypoints = None
-        if hasattr(self, "full_trajectory"):
-            del self.full_trajectory
         self.splines.clear()
-        if hasattr(self, "sim_results"):
-            del self.sim_results
- 
-        # Reset LLM conversation history
+        for attr in ("full_trajectory", "sim_results"):
+            if hasattr(self, attr):
+                delattr(self, attr)
+
         self.choreographer.reset_history()
- 
         logger.info("Backend reset complete.")
-    
