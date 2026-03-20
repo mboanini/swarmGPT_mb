@@ -204,12 +204,16 @@ class AppBackend:
             del self.sim_results
         assert self.waypoints is not None, "Please generate a choreography first"
 
+        sim_data = None
+
         for key, data, total in simulate_axswarm(self.waypoints, self.settings, gui=False):
             if key == "progress":
                 yield key, data, total
             else:
                 sim_data = data
                 break
+        assert sim_data is not None, "simulate_axswarm returned no data"
+
         t = sim_data["timestamps"][::10]
         lam = 0.1  # TODO: Adjust the smoothing parameters
         self.splines.clear()
@@ -251,7 +255,12 @@ class AppBackend:
                 make_smoothing_spline(t, controls[:, j], lam=lam) for j in range(3)
             ]
         if gui:  # Rerun the simulation of the resulting trajectories with GUI
-            simulate_spline(self.splines, self.settings, t[-1], getattr(self, "music_manager", None), gui)
+            simulate_spline(
+                self.splines, 
+                self.settings, 
+                t[-1], 
+                getattr(self, "music_manager", None), 
+                gui)
         logger.info("Simulation successful")
         return sim_data
 
@@ -338,24 +347,42 @@ class AppBackend:
         self.music_manager.song = song
         return song
 
-    def reset_data(self):
-        """Ripristina lo stato interno del backend per una nuova sessione."""
+    def replay(self) -> None:
+        """Replay the last simulation WITHOUT re-running axswarm.
+ 
+        Raises:
+            AssertionError: if no splines are available yet.
+        """
+        assert self.splines, "Please run Simulate first before replaying."
+        logger.info("Replaying last simulation")
+ 
+        # Recompute duration from waypoints (last timestamp of any drone)
+        duration = max(
+            wp[-1, 0] for wp in self.waypoints.values()
+        ) if self.waypoints is not None else 10.0
+ 
+        simulate_spline(
+            self.splines,
+            self.settings,
+            duration,
+            getattr(self, "music_manager", None),
+            True,
+        )
+        logger.info("Replay finished")
+
+    def reset_data(self) -> None:
+        """Reset internal state for a fresh command session."""
         logger.info("Resetting backend data for a new command...")
-        
-        # 1. Svuota i comandi di alto livello e le traiettorie ottimizzate
+ 
         self.waypoints = None
-        self.full_trajectory = None
-
+        if hasattr(self, "full_trajectory"):
+            del self.full_trajectory
         self.splines.clear()
-        
-
-        if hasattr(self, 'sim_results'):
+        if hasattr(self, "sim_results"):
             del self.sim_results
-
-        # 2. Resetta la cronologia dei messaggi dell'LLM tramite il coreografo
-        # Questo è fondamentale per far sì che l'LLM non faccia confusione
-        # con i comandi della sessione precedente.
+ 
+        # Reset LLM conversation history
         self.choreographer.reset_history()
-                
-        logger.info("Backend reset completato.")
+ 
+        logger.info("Backend reset complete.")
     
