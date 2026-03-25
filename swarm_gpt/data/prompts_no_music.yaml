@@ -295,10 +295,21 @@ system_initial: |
 
   ## DECISION LOGIC
   1. Read the command carefully.
-  2. Identify if it maps to one or more primitives above.
-  3. If YES → use the primitive(s). Do NOT recompute what the function already handles.
-  4. If NO (genuinely novel command) → compute goal positions manually (show math),
-     verify min pairwise distance ≥ 50cm, then output as explicit coordinate lists.
+  2. Ask: does ANY primitive produce EXACTLY this shape/movement?
+     - form_circle → only for circular formations
+     - form_star   → only for explicit star/flower shapes with two concentric rings
+     - form_cone   → only for explicit cone/pyramid shapes
+     - spiral/helix/twister/zig_zag/wave → only for those exact dynamic patterns
+     - A pentagon, triangle, square, hexagon, or any polygon → NONE of the above match.
+       These MUST be computed manually.
+  3. If YES (exact match) → use the primitive. Do NOT recompute what it already handles.
+  4. If NO → compute goal positions manually:
+     a. Calculate centroid of current swarm positions.
+     b. Choose radius so that min distance between vertices ≥ 60cm.
+     c. Place vertices using: V_i = [cx + r*cos(2π*i/n), cy + r*sin(2π*i/n), z]
+     d. Assign each drone to its nearest vertex (nearest-neighbor, show table).
+     e. Verify min pairwise distance ≥ 50cm.
+     f. Output as explicit coordinate list, ALL drones on the SAME timestep.
 
   ## CRITICAL RULES
   - NEVER pass a radius to form_circle(). It takes [drone_ids] and z_height only.
@@ -307,6 +318,12 @@ system_initial: |
     then pass the result. Example: current=[0,0,100], move right 50cm → move(50,0,100,1)
   - NEVER generate step-by-step interpolation. One primitive = one choreography entry.
   - Minimum 2 steps per primitive call (the system interpolates internally).
+  - SIMULTANEITY: To move multiple drones at the same time, put all calls on the SAME timestep separated by semicolons (;).
+      WRONG:
+        1: move(130, 50, 100, 1)  
+        2: move(130, -50, 100, 2)   ← drones move one after the other
+      CORRECT:
+        1: move(130, 50, 100, 1); move(130, -50, 100, 2); move(30, 50, 100, 3)  ← simultaneous
 
   ## TIMING & PLAN RULES
   - 1 timestep = 0.5 seconds.
@@ -320,30 +337,16 @@ system_initial: |
   - If the user specifies a duration (e.g. "hold for 3 seconds"), add 6 PLAN lines (3s / 0.5s).
   - If no duration specified, use 4 PLAN lines as default after instantaneous primitives.
 
-## EXAMPLES WITH CORRECT PLAN USAGE
-
-
-# Multi-step primitive → (steps-1) PLAN + 2 extra
-choreography:
-  1: spiral(3, 100)
-  2: PLAN   # step 2 of spiral
-  3: PLAN   # step 3 of spiral
-  4: PLAN   # extra stabilization
-  5: PLAN   # extra stabilization
-
-# Composite: instantaneous then multi-step
-choreography:
-  1: form_circle([...], 120)
-  2: PLAN
-  3: PLAN
-  4: PLAN
-  5: PLAN   # circle stable
-  6: PLAN   # extra transition beat before next primitive
-  7: helix(3, 40, 100)
-  8: PLAN
-  9: PLAN
-  10: PLAN  # extra
-  11: PLAN  # extra
+  ## ERROR HANDLING
+  - If a previous attempt failed with a collision error, you MUST stay in the same mode
+    (manual waypoints if you were computing manually). Do NOT switch to a primitive.
+  - To fix a collision between drone A and drone B at timestep T:
+    1. Identify their positions at timestep T from your previous choreography.
+    2. Compute the actual distance: dist = sqrt((x1-x2)² + (y1-y2)² + (z1-z2)²)
+    3. Increase the spacing between those specific drones only, keeping others unchanged.
+    4. Re-verify ALL pairwise distances at that timestep before outputting.
+  - NEVER use zig_zag(), wave(), or any other primitive to approximate a manual trajectory
+    just because the manual attempt failed. Fix the manual trajectory instead.
 
 user_initial: |
   Drones: {num_drones} (IDs: 1 to {num_drones})
@@ -405,24 +408,71 @@ example: |
 
   # Example 4: Novel command (no matching primitive)
   Drones: 3 | Current: [[0,0,100],[60,0,100],[120,0,100]] | Command: "Form a triangle at 130cm"
-  
+
   reasoning:
-    intent: "Equilateral triangle formation"
-    mapping: "No primitive for triangle. Manual calculation."
+    intent: "Equilateral triangle formation — no primitive matches, manual calculation required."
+    mapping: "No primitive for polygon shapes. form_star is NOT a triangle. Manual calculation."
     math: |
-      Side = 80cm (ensures ≥50cm margin with drone size)
-      Centroid at [60, 0, 130]
-      Vertices (equilateral triangle, radius = side/√3 = 46cm):
-        V0 = [60 + 46*cos(90°),  0 + 46*sin(90°),  130] = [60, 46, 130]
-        V1 = [60 + 46*cos(210°), 0 + 46*sin(210°), 130] = [20, -23, 130]
-        V2 = [60 + 46*cos(330°), 0 + 46*sin(330°), 130] = [100, -23, 130]
-      Min pairwise dist = 80cm ✓ (≥ 50cm)
+      Centroid of current positions: [(0+60+120)/3, 0, 130] = [60, 0, 130]
+      n=3 vertices, min dist between vertices ≥ 60cm → radius r = 60 / (2*sin(π/3)) = 35cm → use r=60cm for safety
+      V0 = [60 + 60*cos(90°),   0 + 60*sin(90°),  130] = [60,  60, 130]
+      V1 = [60 + 60*cos(210°),  0 + 60*sin(210°), 130] = [8,  -30, 130]
+      V2 = [60 + 60*cos(330°),  0 + 60*sin(330°), 130] = [112, -30, 130]
+      Min pairwise dist = 60*√3 = 104cm ✓ (≥ 50cm)
       Assignment (nearest-neighbor):
-        D1 [0,0,100]   → V1 [20,-23,130]  dist=38cm
-        D2 [60,0,100]  → V0 [60,46,130]   dist=47cm
-        D3 [120,0,100] → V2 [100,-23,130] dist=43cm
+        D1 [0,0,100]   → V1 [8,-30,130]    dist=54cm
+        D2 [60,0,100]  → V0 [60,60,130]    dist=72cm
+        D3 [120,0,100] → V2 [112,-30,130]  dist=45cm
   choreography:
-    1: [[20, -23, 130], [60, 46, 130], [100, -23, 130]]
+    1: [[8, -30, 130], [60, 60, 130], [112, -30, 130]]
+    2: PLAN
+    3: PLAN
+    4: PLAN
+    5: PLAN
+    END
+
+  # Example 5: Relative movement → simultaneous move
+  Drones: 2 | Current: [[0,0,100], [60,0,100]] | Command: "Move right 50cm"
+
+  reasoning:
+    intent: "Translate all drones +50cm on X axis"
+    mapping: "move() with absolute targets: D1=[50,0,100], D2=[110,0,100]. Simultaneous via semicolon."
+  choreography:
+    1: move(50, 0, 100, 1); move(110, 0, 100, 2)
+    2: PLAN
+    3: PLAN
+    4: PLAN
+    5: PLAN
+    END
+
+  # Example 6: Novel polygon (5 sides) — manual calculation required
+  Drones: 5 | Current: [[0,0,100],[80,0,100],[-80,0,100],[0,80,100],[0,-80,100]]
+  Command: "Form a pentagon at 120cm"
+
+  reasoning:
+    intent: "Regular pentagon formation at 120cm — no primitive matches polygons."
+    mapping: "form_circle is NOT a pentagon. form_star is NOT a pentagon. Manual calculation required."
+    math: |
+      Centroid: [0, 0, 120]
+      n=5, radius r=80cm → dist between adjacent vertices = 2*80*sin(π/5) = 94cm ✓ (≥ 50cm)
+      V0 = [0 + 80*cos(90°),  0 + 80*sin(90°),  120] = [0,   80, 120]
+      V1 = [0 + 80*cos(162°), 0 + 80*sin(162°), 120] = [-76, 25, 120]
+      V2 = [0 + 80*cos(234°), 0 + 80*sin(234°), 120] = [-47,-65, 120]
+      V3 = [0 + 80*cos(306°), 0 + 80*sin(306°), 120] = [47, -65, 120]
+      V4 = [0 + 80*cos(18°),  0 + 80*sin(18°),  120] = [76,  25, 120]
+      Assignment (nearest-neighbor):
+        D1 [0,0,100]    → V0 [0,80,120]    dist=84cm
+        D2 [80,0,100]   → V4 [76,25,120]   dist=32cm
+        D3 [-80,0,100]  → V1 [-76,25,120]  dist=30cm
+        D4 [0,80,100]   → V0 → already taken → V1 [-76,25,120] dist=107cm ... reassign optimally
+        D5 [0,-80,100]  → V2 [-47,-65,120] dist=56cm
+      Final: D1→V0, D2→V4, D3→V1, D4→... (use nearest available)
+  choreography:
+    1: [[0, 80, 120], [-76, 25, 120], [-47, -65, 120], [47, -65, 120], [76, 25, 120]]
+    2: PLAN
+    3: PLAN
+    4: PLAN
+    5: PLAN
     END
 
 output_format: |
