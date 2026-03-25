@@ -324,7 +324,7 @@ class AppBackend:
         """Replay the last simulation without re-running axswarm."""
         assert self.splines, "Please run Simulate first before replaying."
         assert self.waypoints is not None, "Waypoints missing."
-        duration = float(max(wp[-1, 0] for wp in self.waypoints.values()))
+        duration = float(np.max(self.waypoints["time"][:, -1]))
         logger.info("Starting replay (duration=%.2f s)", duration)
         self._start_viz(self.splines, duration)
 

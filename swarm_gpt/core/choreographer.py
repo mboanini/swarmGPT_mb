@@ -196,7 +196,7 @@ class Choreographer:
             drones, times = np.nonzero(min_distance < min_dist)
             drones, times = drones.tolist(), times.tolist()
             # raise LLMPlanError(f"Drones {set(drones)} get too close at waypoints {set(times)}")
-            raise LLMException(f"Drones {set(drones)} get too close at waypoints {set(times)}")
+            raise LLMException(f"Drones {set(drones)} get too close at waypoints {set(times)}. Fix: increase spacing between these two drones at timestep {times} only.")
 
     def response2waypoints(
         self, text: str, strict: bool = True
