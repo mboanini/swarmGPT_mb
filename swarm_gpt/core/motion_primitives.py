@@ -27,6 +27,7 @@ motion_primitives = {
     "twister": {"n_args": 3},
     "form_star": {"n_args": 3},
     "form_cone": {"n_args": 3},
+    "polygon": {"n_args": 2},
 }
 
 
@@ -573,6 +574,77 @@ def _form_grid(
     des_pos = np.stack([x, y, z], axis=1)
     assignment = _assign_positions(swarm_pos, des_pos)
     return des_pos[assignment]
+
+def polygon(
+    params: tuple[int, int],
+    swarm_pos: NDArray,
+    tstart: float,
+    tend: float,
+    limits: dict[str, NDArray],
+) -> tuple[NDArray, dict[float, dict[int, NDArray]]]:
+    """Form a regular polygon with n sides at given height."""
+    n_sides, height = params
+    height = int(height)
+    n_drones = swarm_pos.shape[0]
+
+    # nr drones less than nr sides
+    if n_drones < n_sides:
+        des_pos = _compute_vertices(n_sides, height, swarm_pos)
+    else if n_drones > n_sides:
+        des_pos = _compute_vertices_and_edges(n_sides, n_drones, height, swarm_pos)
+    else if n_drones % n_sides == 0:
+        des_pos = _compute_vertices(n_sides, height, swarm_pos)
+
+    assignment = _assign_positions(swarm_pos, des_pos)
+    
+    waypoints = {}
+    waypoints[tend] = {i: p.copy() for i, p in enumerate(des_pos[assignment])}
+    return des_pos[assignment], waypoints
+
+    
+def _compute_vertices(n_sides: int, height: int, swarm_pos: NDArray):
+    """Compute the vertices of a regular polygon and assign drones to them."""
+    min_spacing = 60
+
+    # minimum radius
+    radius = max(80, int(min_spacing / (2 * np.sin(np.pi / n_sides))) + 10)
+    
+    cx, cy = np.mean(swarm_pos[:, 0]), np.mean(swarm_pos[:, 1])
+    
+    # vertices
+    angles = [2 * np.pi * i / n_sides + np.pi / 2 for i in range(n_sides)]
+    des_pos = np.array([
+        [cx + radius * np.cos(a), cy + radius * np.sin(a), height]
+        for a in angles
+    ])
+
+    return des_pos
+
+def _compute_vertices_and_edges(n_sides, n_drones, height, swarm_pos):
+    cx, cy = np.mean(swarm_pos[:, 0]), np.mean(swarm_pos[:, 1])
+    radius = max(80, 60 / (2 * np.sin(np.pi / n_sides)))
+    
+    # Vertici principali
+    vertices = np.array([
+        [cx + radius * np.cos(2*np.pi*i/n_sides + np.pi/2),
+         cy + radius * np.sin(2*np.pi*i/n_sides + np.pi/2),
+         height]
+        for i in range(n_sides)
+    ])
+    
+    # Droni extra distribuiti sui lati
+    extra = n_drones - n_sides
+    edge_points = []
+    side_idx = 0
+    while len(edge_points) < extra:
+        v_start = vertices[side_idx % n_sides]
+        v_end = vertices[(side_idx + 1) % n_sides]
+        # Punto a metà del lato
+        midpoint = (v_start + v_end) / 2
+        edge_points.append(midpoint)
+        side_idx += 1
+    
+    return np.vstack([vertices, edge_points[:extra]])
 
 
 def _sanitize_drone_ids(drone_ids: list[int], n_drones: int) -> list[int]:
