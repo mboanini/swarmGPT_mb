@@ -589,10 +589,11 @@ def polygon(
 
     # nr drones less than nr sides
     if n_drones < n_sides:
-        des_pos = _compute_vertices(n_sides, height, swarm_pos)
-    else if n_drones > n_sides:
+        des_pos = _compute_vertices(n_drones, height, swarm_pos)
+    # nr drones more than nr sides 
+    elif n_drones > n_sides:
         des_pos = _compute_vertices_and_edges(n_sides, n_drones, height, swarm_pos)
-    else if n_drones % n_sides == 0:
+    elif n_drones == n_sides:
         des_pos = _compute_vertices(n_sides, height, swarm_pos)
 
     assignment = _assign_positions(swarm_pos, des_pos)

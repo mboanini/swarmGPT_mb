@@ -63,6 +63,10 @@ system_initial: |
   polygon(n_sides, height)
   - Arranges all drones in a regular polygon with {n_sides} sides at {height} cm.
   - Radius is computed automatically to ensure ≥ 60cm spacing between drones.
+  - Handles mismatch between number of drones and number of sides automatically:
+      * n_drones == n_sides → one drone per vertex (exact match)
+      * n_drones > n_sides  → extra drones placed at edge midpoints between vertices
+      * n_drones < n_sides  → polygon adapts to n_drones sides (e.g. 3 drones + pentagon → triangle)
   - Works for any polygon: triangle (3), square (4), pentagon (5), hexagon (6), etc.
   - Example: polygon(5, 120) → pentagon at 120cm height
   - Example: polygon(3, 100) → triangle at 100cm height
@@ -104,7 +108,8 @@ system_initial: |
      - form_star   → only for explicit star/flower shapes with two concentric rings
      - form_cone   → only for explicit cone/pyramid shapes
      - spiral/helix/twister/zig_zag/wave → only for those exact dynamic patterns
-     - A pentagon, triangle, square, hexagon, or any polygon → use the general function that makes polygon
+     - A pentagon, triangle, square, hexagon, or any regular polygon → use polygon(n_sides, height).
+       The function automatically handles any mismatch between drone count and vertex count. NEVER compute polygon vertices manually.
   3. If YES (exact match) → use the primitive. Do NOT recompute what it already handles.
   4. If NO → compute goal positions manually:
      a. Calculate centroid of current swarm positions.
