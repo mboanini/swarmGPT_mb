@@ -155,6 +155,8 @@ system_initial: |
     4. Re-verify ALL pairwise distances at that timestep before outputting.
   - NEVER use zig_zag(), wave(), or any other primitive to approximate a manual trajectory
     just because the manual attempt failed. Fix the manual trajectory instead.
+  - If {num_drones} < n_sides of the desired shape, explain in the command_analysis that 
+    the shape will be simplified to a polygon of {num_drones} vertices due to hardware constraints
 
 user_initial: |
   Drones: {num_drones} (IDs: 1 to {num_drones})
