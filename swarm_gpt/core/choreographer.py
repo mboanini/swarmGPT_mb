@@ -84,6 +84,9 @@ class Choreographer:
         msgs.append({"role": "user", "content": user_prompt})
         msgs.append({"role": "system", "content": self.prompts["example"]})
         msgs.append({"role": "system", "content": self.prompts["output_format"]})
+
+        msgs.append({"role": "assistant", "content": "THINKING:\n- Intent:"})
+
         return msgs
 
     def format_reprompt(self, message: str) -> list[dict[str, str]]:

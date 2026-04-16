@@ -163,28 +163,47 @@ user_initial: |
   Current positions (cm): {starting_pos}
   Command: "{prompt}"
 
-  Think step by step before outputting:
-  1. INTENT: What is the user asking for? (movement / formation / behavior / composite)
-  2. MAPPING: Which primitive(s) cover this command? If move() is needed, compute
-     the absolute target coordinates from current positions + requested delta.
-  3. SEQUENCE: If composite, list the primitives in order.
-  4. OUTPUT: Write the choreography in the format below.
+  Before generating the choreography, complete this THINKING block:
+
+  THINKING:
+  - Intent: [what does the user want? movement / formation / behavior / composite]
+  - Category: [A: exact primitive match | B: regular polygon → polygon() | C: manual waypoints]
+  - Chosen approach: [which primitive or method, and WHY]
+  - Potential issues: [drone count mismatch, bounds, collision risk, or "none"]
+
+  Only AFTER completing THINKING, generate the choreography.
 
 example: |
-  # Example 1: Relative movement → must compute absolute target
+example: |
+  # Example 1: Relative movement
   Drones: 2 | Current: [[0,0,100], [60,0,100]] | Command: "Move right 50cm"
-  
+
+  THINKING:
+  - Intent: translate all drones +50cm along X axis
+  - Category: A — move() primitive, one call per drone
+  - Chosen approach: compute absolute targets: D1=[0+50,0,100]=[50,0,100], D2=[60+50,0,100]=[110,0,100]
+  - Potential issues: D2 target X=110, within bounds ✓
+
   reasoning:
     intent: "Translate all drones +50cm on X axis"
-    mapping: "move() with absolute targets: D1=[0+50,0,100]=[50,0,100], D2=[60+50,0,100]=[110,0,100]"
+    mapping: "move() with absolute targets. Simultaneous via semicolon."
   choreography:
-    1: move(50, 0, 100, 1)
-    2: move(110, 0, 100, 2)
+    1: move(50, 0, 100, 1); move(110, 0, 100, 2)
+    2: PLAN
+    3: PLAN
+    4: PLAN
+    5: PLAN
     END
 
   # Example 2: Formation
   Drones: 4 | Current: [[0,0,80],...] | Command: "Form a circle at 120cm"
-  
+
+  THINKING:
+  - Intent: circular formation at 120cm height
+  - Category: A — form_circle() is an exact match
+  - Chosen approach: form_circle([...], 120) — radius auto-computed, NOT passed manually
+  - Potential issues: none
+
   reasoning:
     intent: "Circular formation at height 120cm"
     mapping: "form_circle() — radius auto-computed, just pass height"
@@ -193,12 +212,18 @@ example: |
     2: PLAN
     3: PLAN
     4: PLAN
-    5: PLAN   # drones now stable at circle formation
+    5: PLAN
     END
 
   # Example 3: Composite command
   Drones: 6 | Current: [...] | Command: "Group together, then spiral up"
-  
+
+  THINKING:
+  - Intent: regroup drones then ascend in spiral — composite command
+  - Category: A — two primitives in sequence: center() then helix()
+  - Chosen approach: center([...]) to regroup, then helix(8, 60, 100) to spiral upward
+  - Potential issues: need extra PLAN between primitives for transition
+
   reasoning:
     intent: "Regroup then ascend in spiral"
     mapping: "center() to regroup, then helix() to spiral upward"
@@ -207,21 +232,27 @@ example: |
     2: PLAN
     3: PLAN
     4: PLAN
-    5: PLAN   # circle stable
-    6: PLAN   # extra transition beat before next primitive
+    5: PLAN
+    6: PLAN
     7: helix(8, 60, 100)
     8: PLAN
     9: PLAN
-    10: PLAN  # extra
-    11: PLAN  # extra
-    END  
+    10: PLAN
+    11: PLAN
+    END
 
-  # Example 4: Novel regular polygon via primitive
+  # Example 4: Regular polygon
   Drones: 3 | Current: [[0,0,100],[60,0,100],[120,0,100]] | Command: "Form a triangle at 130cm"
 
+  THINKING:
+  - Intent: equilateral triangle formation at 130cm
+  - Category: B — regular polygon, polygon() is the correct primitive
+  - Chosen approach: polygon(3, 130) — NOT form_star, NOT manual vertices
+  - Potential issues: none, n_drones == n_sides
+
   reasoning:
-    intent: "Equilateral triangle formation at height 130cm."
-    mapping: "polygon() - 3 drones, 130 cm height "
+    intent: "Triangle formation at 130cm"
+    mapping: "polygon(3, 130) — radius and assignment handled automatically"
   choreography:
     1: polygon(3, 130)
     2: PLAN
@@ -230,14 +261,21 @@ example: |
     5: PLAN
     END
 
-  # Example 5: Relative movement → simultaneous move
-  Drones: 2 | Current: [[0,0,100], [60,0,100]] | Command: "Move right 50cm"
+  # Example 5: Polygon with drone mismatch
+  Drones: 3 | Current: [[0,0,100],[60,0,100],[120,0,100]] | Command: "Form a pentagon at 120cm"
+
+  THINKING:
+  - Intent: pentagon formation at 120cm
+  - Category: B — regular polygon, use polygon()
+  - Chosen approach: polygon(5, 120) — n_drones (3) < n_sides (5), system adapts automatically
+  - Potential issues: drone count mismatch — only 3 drones, pentagon needs 5. polygon() will
+    form a 3-sided polygon instead. This will be noted in reasoning.
 
   reasoning:
-    intent: "Translate all drones +50cm on X axis"
-    mapping: "move() with absolute targets: D1=[50,0,100], D2=[110,0,100]. Simultaneous via semicolon."
+    intent: "Pentagon at 120cm — only 3 drones available, shape adapted to triangle automatically"
+    mapping: "polygon(5, 120) — mismatch handled internally by polygon()"
   choreography:
-    1: move(50, 0, 100, 1); move(110, 0, 100, 2)
+    1: polygon(5, 120)
     2: PLAN
     3: PLAN
     4: PLAN
