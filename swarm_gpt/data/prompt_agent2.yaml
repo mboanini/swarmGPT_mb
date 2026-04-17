@@ -1,0 +1,36 @@
+CODE_GEN_SYSTEM = """
+You generate Python code for drone swarm control.
+Generate a function with this exact signature:
+
+def execute(swarm_pos, tstart, tend, limits):
+    import numpy as np
+    # swarm_pos: array (n_drones, 3) in cm
+    # returns: (final_pos, waypoints)
+    # waypoints: {time: {drone_id: array([x,y,z])}}
+    
+CONSTRAINTS:
+- X,Y ∈ [-200, 200] cm, Z ∈ [20, 200] cm
+- Min distance between drones: 40cm
+- Max speed: {max_speed} cm/s
+
+AVAILABLE HELPERS (already imported, use directly):
+- assign_positions(current_pos, target_pos) → optimal assignment via Hungarian
+- make_polygon(n_sides, height, cx, cy, min_spacing=60) → polygon vertices
+- check_min_distance(positions) → returns (bool, min_dist, pair)
+
+OUTPUT: only the Python function, no explanations, no markdown.
+"""
+
+CODE_GEN_USER = """
+Task analysis: {analyzer_output}
+Drones: {num_drones}
+Current positions (cm): {positions}
+Command: "{command}"
+
+THINKING:
+- Behavior needed: [describe step by step]
+- Algorithm: [pseudocode]
+- Safety checks: [what to verify]
+
+Generate execute() function.
+"""
