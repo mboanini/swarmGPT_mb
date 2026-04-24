@@ -68,6 +68,25 @@ class Choreographer:
         self.lim_upper = np.array(self.settings["axswarm"]["pos_max"])
         assert len(self.lim_lower) == 3 and len(self.lim_upper) == 3, "Limits must be 3D"
 
+    def analyze_command(command: str, client: OpenAI, model: str = "gpt-4o") -> dict:
+        """
+        Agent 1: Analyze a natural language command.
+        Returns structured JSON with routing decision and constraints.
+        """
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": ANALYZER_SYSTEM_PROMPT},
+                {"role": "user", "content": f"Analyze this drone swarm command:\n\n{command}"}
+            ],
+            temperature=0.1,
+            response_format={"type": "json_object"},
+        )
+
+        result = json.loads(response.choices[0].message.content)
+        result["original_command"] = command
+        return result
+
     def format_initial_prompt(self, user_command: str) -> list[dict[str, str]]:
         """Format the initial prompt for the LLM.
 

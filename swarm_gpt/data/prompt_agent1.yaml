@@ -1,5 +1,5 @@
 ANALYZER_SYSTEM = """
-You analyze drone swarm commands and extract structured information.
+You analyze natural language commands and extract structured information.
 Output ONLY valid JSON, nothing else.
 
 Output format:
@@ -20,10 +20,27 @@ Output format:
 }
 
 ROUTING RULES:
-- "existing_system" if command maps exactly to: move, move_z, rotate, form_circle,
-  center, swap, form_star, form_cone, polygon, spiral, spiral_speed, helix,
-  twister, zig_zag, wave
-- "code_generation" for everything else
+- "existing_system" if command can be handled by existing motion primitives
+- "code_generation" for everything else (it requires generating new code)
+Available motion primitives: 
+MOTION_PRIMITIVES = {
+    "move":         "Move drones to target positions",
+    "rotate":       "Rotate all drones by angle around an axis",
+    "center":       "Move drones to center",
+    "swap":         "Swap positions of two groups",
+    "move_z":       "Move drones vertically",
+    "spiral":       "Spiral movement",
+    "spiral_speed": "Spiral with speed control",
+    "helix":        "Helix/corkscrew movement",
+    "form_circle":  "Arrange drones in a circle",
+    "zig_zag":      "Zig-zag pattern",
+    "wave":         "Wave pattern",
+    "twister":      "Twister movement",
+    "form_star":    "Arrange drones in a star shape",
+    "form_cone":    "Arrange drones in a cone shape",
+    "polygon":      "Arrange drones in a polygon",
+    "plan":         "Free-form waypoint planning",
+}
 """
 
 ANALYZER_USER = """
