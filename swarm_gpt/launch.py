@@ -11,7 +11,6 @@ import fire
 
 from swarm_gpt.core import AppBackend
 from swarm_gpt.ui import create_ui
-from swarm_gpt.utils import get_ros_package_path
 
 
 def mklog_date(path: Path) -> Path:
@@ -47,9 +46,7 @@ def main(
     # Get a list of all music titles available in the music directory
     music_dir = Path(__file__).resolve().parents[1] / "music"
     
-    # submodules/crazyswarm/ros_ws/src/crazyswarm/launch/crazyflies.yaml
-    crazyswarm_path = get_ros_package_path("crazyswarm", heuristic_search=True)
-    config_file = crazyswarm_path / "launch/crazyflies.yaml"
+    config_file = Path(__file__).resolve().parents[1] / "config" / "crazyflies.yaml"
 
     # Model IDs: "gpt-4o-2024-05-13", "gpt-3.5-turbo-0125", "gpt-4o-2024-05-13"
     backend = AppBackend(

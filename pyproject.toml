@@ -27,7 +27,7 @@ dependencies = [
     "pyyaml",
     "openai",
     "scipy",
-    "rospkg",
+    "ament-index-python",
     "libfmp",
     "mutagen",
     "python-vlc",

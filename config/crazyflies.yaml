@@ -1,0 +1,94 @@
+# crazyswarm2 / crazyflie_ros2 parameter format (ROS 2 Humble)
+# Converted from the ROS 1 crazyflies.yaml + crazyflieTypes.yaml
+#
+# Each key under "robots:" must be a unique name (e.g. cf11, cf12 ...).
+# The id field maps to the last byte of the radio URI (0x0B = 11, etc.).
+
+/crazyflie_server:
+  ros__parameters:
+
+    # ── Motion capture ────────────────────────────────────────────────────────
+    motion_capture_type: "vicon"          # vicon | optitrack | qualisys | vrpn | none
+    object_tracking_type: "motionCapture" # motionCapture | libobjecttracker
+    motion_capture_host_name: "localhost"
+    send_position_only: false
+
+    # ── Logging ───────────────────────────────────────────────────────────────
+    enable_logging: false
+    enable_logging_pose: true
+    enable_parameters: true
+    genericLogTopics: ["log1"]
+    genericLogTopicFrequencies: [10]
+    genericLogTopic_log1_Variables: ["stateEstimate.x", "ctrltarget.x"]
+
+    # ── Robot instances ───────────────────────────────────────────────────────
+    robots:
+      cf11:
+        enabled: true
+        uri: radio://0/100/2M/E7E7E7E70B
+        initial_position: [0.5, 0.5, 0.0]
+        type: medium
+      cf12:
+        enabled: true
+        uri: radio://0/100/2M/E7E7E7E70C
+        initial_position: [0.5, -0.5, 0.0]
+        type: medium
+      cf13:
+        enabled: true
+        uri: radio://0/100/2M/E7E7E7E70D
+        initial_position: [-0.5, 0.5, 0.0]
+        type: medium
+      cf14:
+        enabled: true
+        uri: radio://0/100/2M/E7E7E7E70E
+        initial_position: [-0.5, -0.5, 0.0]
+        type: medium
+      cf15:
+        enabled: true
+        uri: radio://0/100/2M/E7E7E7E70F
+        initial_position: [1.0, 0.5, 0.0]
+        type: medium
+
+    # ── Robot types ───────────────────────────────────────────────────────────
+    robot_types:
+      medium:
+        big_quad: true
+        battery_voltage_warning: 7.6
+        battery_voltage_critical: 7.4
+        marker_configuration: 1
+        dynamics_configuration: 0
+        firmware_params:
+          commander:
+            enHighLevel: 1
+          stabilizer:
+            estimator: 2   # 1: complementary, 2: kalman
+            controller: 2  # 1: PID, 2: mellinger
+          ring:
+            effect: 16
+            solidBlue: 255
+            solidGreen: 0
+            solidRed: 0
+            headlightEnable: 0
+          locSrv:
+            extPosStdDev: 1.0e-3
+            extQuatStdDev: 0.05
+          kalman:
+            resetEstimation: 1
+          ctrlMel:
+            kp_xy: 2.0
+            kd_xy: 1.0
+            ki_xy: 0.1
+            i_range_xy: 2.0
+            kR_xy: 50000
+            kw_xy: 16000
+            kR_z: 60000
+            kw_z: 12000
+            ki_m_z: 500
+            i_range_m_z: 1500
+            kd_omega_rp: 200
+            kp_z: 3.0
+            kd_z: 1.0
+            ki_z: 0.5
+            i_range_z: 2.0
+            mass: 0.110
+            massThrust: 23000

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 import mujoco
 import numpy as np
-import rospkg
+from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
 from scipy.spatial.transform import Rotation as R
 
 if TYPE_CHECKING:
@@ -19,39 +19,36 @@ logger = logging.getLogger(__name__)
 
 
 def get_ros_package_path(pkg: str, heuristic_search: bool = False) -> Path:
-    """Get the path to a ROS package.
+    """Get the share directory path of a ROS 2 package.
 
     If the package is not found and heuristic_search is enabled, we search for the package manually
     in the user's home directory. Any directory with the pattern *_ws is considered a workspace. We
-    then check if the crazyswarm folder is present in the src directory of the workspace.
+    then check if the colcon install layout contains the package share directory.
 
     Args:
-        pkg: The name of the ROS package.
-        heuristic_search: Flag to enable search heuristics if ROS cannot find the package.
+        pkg: The name of the ROS 2 package.
+        heuristic_search: Flag to enable search heuristics if ROS 2 cannot find the package.
 
     Returns:
-        The path to the ROS package.
+        The share directory path of the ROS 2 package.
     """
     try:
-        return Path(rospkg.RosPack().get_path(pkg))
-    except rospkg.common.ResourceNotFound as e:
+        return Path(get_package_share_directory(pkg))
+    except PackageNotFoundError as e:
         if not heuristic_search:
             raise e
-    logger.info(f"ROS package {pkg} not found. Searching for the package manually.")
+    logger.info(f"ROS 2 package {pkg} not found. Searching for the package manually.")
     home = Path.home()
-    for path in (d for d in home.glob("*_ws") if d.is_dir()):
-        if not (path / f"src/{pkg}").is_dir():
-            continue
-        pkg_path = path / f"src/{pkg}"
-        # Check if the installed package is in the old or new layout. Old layout has nested ros_ws
-        # directories, new layout has the proper ROS package structure.
-        layout = "old" if (pkg_path / "ros_ws").is_dir() else "new"
-        if layout == "old":
-            pkg_path = pkg_path / f"ros_ws/src/{pkg}"
-        if not pkg_path.is_dir():
-            continue
-        return pkg_path
-    raise rospkg.common.ResourceNotFound(f"ROS package {pkg} not found.")
+    for ws_path in (d for d in home.glob("*_ws") if d.is_dir()):
+        # ROS 2 colcon install layout: install/<pkg>/share/<pkg>/
+        pkg_share = ws_path / f"install/{pkg}/share/{pkg}"
+        if pkg_share.is_dir():
+            return pkg_share
+        # Fallback: legacy crazyswarm submodule layout with nested ros_ws
+        pkg_legacy = ws_path / f"src/{pkg}/ros_ws/src/{pkg}"
+        if pkg_legacy.is_dir():
+            return pkg_legacy
+    raise PackageNotFoundError(f"ROS 2 package {pkg} not found in any *_ws workspace.")
 
 
 def draw_line(
