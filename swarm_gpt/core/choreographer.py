@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import logging
 import os
 import re
@@ -62,28 +63,55 @@ class Choreographer:
         prompt = "prompts_prim" if self.use_motion_primitives else "prompts_no_music"
         with open(Path(__file__).resolve().parents[1] / f"data/{prompt}.yaml", "r") as f:
             self.prompts = yaml.safe_load(f)
+        prompt_agent_one = "prompt_agent1"
+        with open(Path(__file__).resolve().parents[1] / f"data/{prompt_agent_one}.yaml", "r") as f:
+            self.prompts_a1 = yaml.safe_load(f)
         self.load_drone_config(config_file)
         # Limits define boundaries of permissible flying area
         self.lim_lower = np.array(self.settings["axswarm"]["pos_min"])
         self.lim_upper = np.array(self.settings["axswarm"]["pos_max"])
         assert len(self.lim_lower) == 3 and len(self.lim_upper) == 3, "Limits must be 3D"
 
-    def analyze_command(command: str, client: OpenAI, model: str = "gpt-4o") -> dict:
-        """
-        Agent 1: Analyze a natural language command.
-        Returns structured JSON with routing decision and constraints.
-        """
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": ANALYZER_SYSTEM_PROMPT},
-                {"role": "user", "content": f"Analyze this drone swarm command:\n\n{command}"}
-            ],
-            temperature=0.1,
-            response_format={"type": "json_object"},
-        )
+    # def analyze_command(self, command: str) -> dict:
+    #     # client: OpenAI, model: str = "gpt-4o"
+    #     """
+    #     Agent 1: Analyze a natural language command.
+    #     Returns structured JSON with routing decision and constraints.
+    #     """
+    #     msgs = []
+    #     msgs.append({"role": "system", "content": self.prompts_a1["system"]})
+    #     msgs.append({"role": "user", "content": f"Analyze this drone swarm command:\n\n{command}"})
+    #     response = self._call_openai(msgs)
 
-        result = json.loads(response.choices[0].message.content)
+    #     # response = client.chat.completions.create(
+    #     #     model=self._model_id,
+    #     #     messages=[
+    #     #         {"role": "system", "content": ANALYZER_SYSTEM},
+    #     #         {"role": "user", "content": f"Analyze this drone swarm command:\n\n{command}"}
+    #     #     ],
+    #     #     temperature=0.1,
+    #     #     response_format={"type": "json_object"},
+    #     # )
+
+    #     result = json.loads(response)
+    #     print("Agent 1 Result:", result)
+    #     result["original_command"] = command
+    #     return result
+
+    def analyze_command(self, command: str) -> dict:
+        """Agent 1: Analyze a natural language command."""
+        msgs = [
+            {"role": "system", "content": self.prompts_a1["system"]},
+            {"role": "user", "content": f"Analyze this drone swarm command:\n\n{command}"}
+        ]
+        response = self._call_openai(msgs)
+        # Strip markdown code blocks if present
+        if "```json" in response:
+            response = response.split("```json")[1].split("```")[0].strip()
+        elif "```" in response:
+            response = response.split("```")[1].split("```")[0].strip()
+        
+        result = json.loads(response)
         result["original_command"] = command
         return result
 
@@ -153,12 +181,12 @@ class Choreographer:
             self.starting_pos[i][2] = self.settings["starting_height"]
         self.num_drones = len(self.agents.values())
         assert self.num_drones > 0, "No drones detected in config file"
-    
+
     def _format_initial_user_prompt(self, user_command: str) -> str:
         """Format the initial user prompt for the LLM.
 
         Args:
-            user_command: prompt given by the user 
+            user_command: prompt given by the user
         """
         # Convert to cm for LLM compatibility
         starting_pos = [(pos * 100).astype(int).tolist() for pos in self.starting_pos.values()]
@@ -267,7 +295,7 @@ class Choreographer:
         else:
             logger.info("Executing Case 3: Hybrid Output Detected")
             waypoints = self._handle_hybrid_choreography(choreo_steps, timestamps)
-        
+
         # Clip waypoint values to the physical limits
         waypoints["pos"] = np.clip(waypoints["pos"], self.lim_lower, self.lim_upper)
         if strict:
@@ -364,11 +392,11 @@ class Choreographer:
         # 1. Prepariamo la matrice dei risultati (n_drones, T+1, 3)
         # T+1 perché includiamo la posizione di partenza al tempo 0
         full_pos = np.zeros((self.num_drones, len(timestamps) + 1, 3))
-        
+
         # Inizializziamo il tempo 0 con le posizioni iniziali
         start_pos_meters = np.array(list(self.starting_pos.values()))
         full_pos[:, 0, :] = start_pos_meters
-        
+
         # Posizione corrente per le funzioni (in cm per compatibilità con le tue primitive)
         current_swarm_cm = {i: p.copy() * 100 for i, p in enumerate(start_pos_meters)}
 
@@ -387,18 +415,18 @@ class Choreographer:
                 # --- PARTE PRIMITIVE ---
                 # Qui usiamo la tua logica esistente: _primitive2waypoints
                 # Nota: Devi gestire il nome della funzione e gli argomenti come fai in _choreo2waypoints
-                fn_name, args = self._parse_single_primitive(content) 
-                
+                fn_name, args = self._parse_single_primitive(content)
+
                 # La tua funzione restituisce la nuova posizione e i waypoint generati
                 new_pos_cm, step_waypoints = self._primitive2waypoints(
                     fn_name, args, current_swarm_cm, t_prev, t_curr
                 )
-                
+
                 # Estraiamo la posizione finale del drone per questo step (convertita in metri)
                 for d_id in range(self.num_drones):
                     # step_waypoints[t_curr][d_id] è la posizione calcolata dalla funzione
                     full_pos[d_id, i+1, :] = step_waypoints[t_curr][d_id] / 100.0
-                
+
                 current_swarm_cm = new_pos_cm
 
         return {
@@ -414,14 +442,14 @@ class Choreographer:
             # 1. Pulizia e separazione: 'spiral(10, 100)' -> ['spiral', '10, 100)']
             parts = content.split("(", 1)
             fn_name = parts[0].strip().lower()
-            
+
             # 2. Pulizia degli argomenti: '10, 100)' -> '10, 100'
             raw_args = parts[1].rsplit(")", 1)[0]
-            
+
             # 3. Conversione in tupla Python sicura
             # Aggiungiamo una virgola finale per gestire il caso di un singolo argomento (es. '(100,)')
             fn_args = ast.literal_eval("(" + raw_args + ",)")
-            
+
             # Rimuoviamo la virgola extra se ast l'ha aggiunta a un singolo elemento
             if isinstance(fn_args, tuple) and len(fn_args) > 0:
                 # Se l'ultimo elemento è vuoto a causa della nostra virgola forzata, lo togliamo

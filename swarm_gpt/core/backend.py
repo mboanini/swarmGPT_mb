@@ -251,29 +251,60 @@ class AppBackend:
     def presets(self) -> list[str]:
         return [s.name for s in (self.root_path / "swarm_gpt/data/presets").glob("*")]
 
+    # @self_correct(n_retries=2)
+    # def initial_prompt(self, text: str, *, response: str | None = None) -> list[dict[str, str]]:
+    #     logger.info("Generating initial choreography for: %s", text)
+    #     self.choreographer.reset_history()
+    #     prompt = self.choreographer.format_initial_prompt(text)
+
+    #     fixed_response = response is not None
+    #     preset = False
+    #     if response is None:
+    #         response = self.choreographer.generate_choreography(prompt)
+    #     else:
+    #         self.choreographer.messages.append({"role": "assistant", "content": response})
+
+    #     try:
+    #         self.waypoints = self.choreographer.response2waypoints(
+    #             response, strict=self._strict_processing
+    #         )
+    #     except LLMException as e:
+    #         if preset or fixed_response:
+    #             raise RuntimeError("Initial prompt failed") from e
+    #         raise e
+    #     logger.info("Successfully generated choreography")
+    #     return self.choreographer.messages
+
     @self_correct(n_retries=2)
     def initial_prompt(self, text: str, *, response: str | None = None) -> list[dict[str, str]]:
         logger.info("Generating initial choreography for: %s", text)
         self.choreographer.reset_history()
-        prompt = self.choreographer.format_initial_prompt(text)
+        agent_one = self.choreographer.analyze_command(text)
+        if agent_one['routing'] == "existing_system":
+            prompt = self.choreographer.format_initial_prompt(text)
 
-        fixed_response = response is not None
-        preset = False
-        if response is None:
-            response = self.choreographer.generate_choreography(prompt)
+            fixed_response = response is not None
+            preset = False
+            if response is None:
+                response = self.choreographer.generate_choreography(prompt)
+            else:
+                self.choreographer.messages.append({"role": "assistant", "content": response})
+
+            try:
+                self.waypoints = self.choreographer.response2waypoints(
+                    response, strict=self._strict_processing
+                )
+            except LLMException as e:
+                if preset or fixed_response:
+                    raise RuntimeError("Initial prompt failed") from e
+                raise e
+            logger.info("Successfully generated choreography")
+            return self.choreographer.messages
         else:
-            self.choreographer.messages.append({"role": "assistant", "content": response})
+            logger.info("Agent2 code generator")
 
-        try:
-            self.waypoints = self.choreographer.response2waypoints(
-                response, strict=self._strict_processing
-            )
-        except LLMException as e:
-            if preset or fixed_response:
-                raise RuntimeError("Initial prompt failed") from e
-            raise e
-        logger.info("Successfully generated choreography")
         return self.choreographer.messages
+        
 
     @self_correct(n_retries=3)
     def reprompt(self, message: str) -> list[dict[str, str]]:
