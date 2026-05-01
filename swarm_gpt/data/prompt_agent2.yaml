@@ -1,36 +1,195 @@
-CODE_GEN_SYSTEM = """
-You generate Python code for drone swarm control.
-Generate a function with this exact signature:
+env_description: |
+  Environment: 3D indoor arena for Crazyflie drone swarm.
+    - Arena bounds: x, y in [-2.0, 2.0] m, z in [0.3, 2.0] m
+    - Coordinate system: X=forward, Y=left, Z=up
+  Drone specs:
+    - Max speed: 0.5 m/s
+    - Min inter-drone distance: 0.4 m
+    - Control frequency: 10 Hz
+    - AMSwarm safety filter corrects trajectories automatically
+  Control model:
+    - Each drone runs local_skill code independently at 10 Hz
+    - A centralized allocator runs once at start to assign tasks
+    - Output: each drone calls set_target_position(x, y, z) each step
 
-def execute(swarm_pos, tstart, tend, limits):
-    import numpy as np
-    # swarm_pos: array (n_drones, 3) in cm
-    # returns: (final_pos, waypoints)
-    # waypoints: {time: {drone_id: array([x,y,z])}}
-    
-CONSTRAINTS:
-- X,Y ∈ [-200, 200] cm, Z ∈ [20, 200] cm
-- Min distance between drones: 40cm
-- Max speed: {max_speed} cm/s
+local_api: |
+  def get_self_id() -> int:
+      """Get unique ID of this drone (0-indexed)."""
 
-AVAILABLE HELPERS (already imported, use directly):
-- assign_positions(current_pos, target_pos) → optimal assignment via Hungarian
-- make_polygon(n_sides, height, cx, cy, min_spacing=60) → polygon vertices
-- check_min_distance(positions) → returns (bool, min_dist, pair)
+  def get_self_position() -> np.ndarray:
+      """Get current position [x, y, z] in meters."""
 
-OUTPUT: only the Python function, no explanations, no markdown.
-"""
+  def get_self_velocity() -> np.ndarray:
+      """Get current velocity [vx, vy, vz] in m/s."""
 
-CODE_GEN_USER = """
-Task analysis: {analyzer_output}
-Drones: {num_drones}
-Current positions (cm): {positions}
-Command: "{command}"
+  def get_neighbors(radius_m: float = 2.0) -> list[dict]:
+      """Get drones within radius.
+      Returns: [{id, position, velocity, distance}]"""
 
-THINKING:
-- Behavior needed: [describe step by step]
-- Algorithm: [pseudocode]
-- Safety checks: [what to verify]
+  def get_all_drones_positions() -> dict:
+      """Get all drone positions {drone_id: np.ndarray([x, y, z])}."""
 
-Generate execute() function.
-"""
+  def get_swarm_size() -> int:
+      """Get total number of drones."""
+
+  def get_environment_bounds() -> dict:
+      """Get arena limits: {x_min, x_max, y_min, y_max, z_min, z_max}"""
+
+  def get_assigned_task():
+      """Get task assigned by global allocator (angle, position, index...).
+      Called once at start."""
+
+  def set_target_position(position: np.ndarray):
+      """Set waypoint [x, y, z] for this drone.
+      AMSwarm safety filter handles collision avoidance automatically."""
+
+global_api: |
+  def get_all_drones_positions() -> dict:
+      """Get all drone positions {drone_id: np.ndarray([x, y, z])}."""
+
+  def get_swarm_size() -> int:
+      """Get total number of drones."""
+
+  def get_environment_bounds() -> dict:
+      """Get arena limits: {x_min, x_max, y_min, y_max, z_min, z_max}"""
+
+  def assign_task(drone_id: int, task):
+      """Assign a task (angle, position, index...) to a specific drone."""
+
+analyze_skills: |
+  ## Role:
+  You are a function designer for a Crazyflie drone swarm system.
+  Design the functions needed to implement the user command, based on the constraints provided.
+
+  ## Environment:
+  {env_des}
+
+  ## User command:
+  {instruction}
+
+  ## Constraints to satisfy:
+  {constraints}
+
+  ## Available local APIs (run on each drone at 10Hz):
+  ```python
+  {local_api}
+  ```
+
+  ## Available global APIs (run once at start for task allocation):
+  ```python
+  {global_api}
+  ```
+
+  ## Output format:
+  ##Reasoning: (Think step by step. First analyze global functions for task allocation, then local functions for per-drone behavior.)
+  ```json
+  {{
+    "functions": [
+      {{
+        "name": "function_name",
+        "description": "what it does, inputs, outputs",
+        "constraints": ["constraint names this function satisfies"],
+        "calls": ["APIs or other functions this function calls"],
+        "scope": "global or local"
+      }}
+    ]
+  }}
+  ```
+
+  ## Rules:
+  - Global functions run ONCE at start. They allocate tasks to drones via assign_task().
+  - Local functions run at 10Hz on each drone independently.
+  - The last local function must be run_loop() which calls set_target_position().
+  - Not all tasks need a global allocator. Use one only if drones need distinct assigned subtasks.
+  - Each function implements one responsibility.
+  - Each constraint must be satisfied by at least one function.
+  - Specify call relationships between functions.
+  - No while loops.
+  - AMSwarm handles collision avoidance automatically.
+
+write_function: |
+  ## Role:
+  Complete the following drone swarm function according to its description and constraints.
+
+  ## Environment:
+  {env_des}
+
+  ## User command:
+  {instruction}
+
+  ## Available APIs:
+  ```python
+  {robot_api}
+  ```
+
+  ## Already implemented functions (call directly, do not reimplement):
+  ```python
+  {other_functions}
+  ```
+
+  ## Constraints this function must satisfy:
+  {constraints}
+
+  ## Implement this function:
+  ### Reasoning: (step by step)
+  ### Code:
+  ```python
+  import numpy as np
+  {function_signature}
+      """{function_description}"""
+      ...(implement here)
+  ```
+
+  ## Rules:
+  - Use ONLY the APIs and already-implemented functions listed above.
+  - No while loops.
+  - No global variables.
+  - No raise or assert statements.
+  - Handle edge cases (empty lists, zero division).
+  - Bounds: x,y in [-1.8, 1.8] m, z in [0.4, 1.8] m.
+  - AMSwarm handles collision avoidance.
+  - If doing task allocation: call assign_task(drone_id, task) for each drone.
+  - Output ONLY the function code block.
+
+write_run: |
+  ## Role:
+  Write the run_loop() function that orchestrates the drone swarm behavior.
+  This is the entry point called at 10Hz on each drone.
+
+  ## Environment:
+  {env_des}
+
+  ## User command:
+  {instruction}
+
+  ## Available APIs:
+  ```python
+  {local_api}
+  ```
+
+  ## Already implemented functions (call directly):
+  ```python
+  {all_functions}
+  ```
+
+  ## Task:
+  Complete run_loop() which:
+  1. Reads current drone state
+  2. Calls the implemented functions
+  3. Calls set_target_position(position) with the computed target
+
+  ### Reasoning: (step by step)
+  ### Code:
+  ```python
+  import numpy as np
+  def run_loop():
+      """Entry point called at 10Hz on each drone."""
+      ...(implement here)
+  ```
+
+  ## Rules:
+  - Call set_target_position() exactly once per call.
+  - Use existing functions, do not reimplement logic.
+  - No while loops.
+  - No global variables.
+  - Output ONLY the run_loop() code block.

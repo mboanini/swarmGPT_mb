@@ -19,6 +19,7 @@ from openai import OpenAI
 from swarm_gpt.core.motion_primitives import motion_primitives as motion_primitives_collection
 from swarm_gpt.core.motion_primitives import primitive_by_name
 from swarm_gpt.exception import LLMFormatError, LLMPlanError, LLMResponseProcessingError, LLMException
+from swarm_gpt.core.agent2 import Agent2
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -58,6 +59,10 @@ class Choreographer:
         self.starting_pos = {}
         self.num_drones = 0
         self.messages = []
+        self.agent2 = Agent2(
+            call_llm_fn=self._call_openai,
+            prompts_path=Path(__file__).resolve().parents[1] / "data/prompt_agent2.yaml"
+)
         # Load prompts from file
         # prompt = "prompts_no_music"
         prompt = "prompts_prim" if self.use_motion_primitives else "prompts_no_music"

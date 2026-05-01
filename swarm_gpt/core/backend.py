@@ -302,6 +302,23 @@ class AppBackend:
             return self.choreographer.messages
         else:
             logger.info("Agent2 code generator")
+            constraints_raw = agent_one.get("constraints", [])
+            if isinstance(constraints_raw, dict):
+                constraints = [
+                    {
+                        "name": k, "description": str(v)
+                    }
+                    for k, v in constraints_raw.items()
+                    if v is not None
+                ]
+            else: 
+                constraints = constraints_raw
+            print("DEBUG constraints converted:", constraints)
+            code = self.choreographer.agent2.generate(text, constraints)
+            self.waypoints = self.choreographer.agent2.code_to_waypoints(
+                code, self.choreographer.starting_pos, n_steps=20
+            )
+            logger.info("Successfully generated choreography")
 
         return self.choreographer.messages
         
