@@ -5,16 +5,16 @@ system: |
   Output format:
   {
     "category": "primitive" | "composite" | "behavioral" | "unknown",
-    "known_primitive": "form_circle" | "polygon" | "spiral" | null,
+    "known_primitive": "form_circle" | "polygon" | "spiral" | ... | null,
     "behavior_type": "formation" | "movement" | "formation+movement" | "reactive" | null,
     "constraints": {
-      "shape": null,
-      "n_sides": null,
-      "height_cm": null,
-      "distance_cm": null,
-      "direction": null,
-      "duration_s": null,
-      "speed_cms": null
+      "shape": string | null,
+      "n_sides": int | null,
+      "height_cm": int | null,
+      "distance_cm": int | null,
+      "direction": "+X" | "-X" | "+Y" | "-Y" | "+Z" | "-Z" | null,
+      "duration_s": float | null,
+      "speed_cms": float | null
     },
     "routing": "existing_system" | "code_generation"
   }

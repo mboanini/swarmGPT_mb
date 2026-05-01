@@ -4,6 +4,7 @@ mock 3D e campiona le posizioni dei droni → waypoints compatibili con SwarmGPT
 from __future__ import annotations
 
 import ast
+import inspect
 import logging
 from typing import Any
 
@@ -296,6 +297,64 @@ class WaypointSampler:
             "polygon": self.polygon,
         }
 
+    def _build_known_args(self) -> dict:
+        """Valori da iniettare automaticamente negli entry point in base al nome del parametro."""
+        positions = self.initial_positions
+        centroid = np.mean(list(positions.values()), axis=0)
+        return {
+            "drone_ids":          self.get_all_drones_id(),
+            "all_drone_ids":      self.get_all_drones_id(),
+            "environment_bounds": self.get_environment_range(),
+            "env_bounds":         self.get_environment_range(),
+            "bounds":             self.get_environment_range(),
+            "initial_positions":  self.get_all_drones_initial_position(),
+            "n_drones":           self.n_drones,
+            "num_drones":         self.n_drones,
+            "flock_center":       centroid,
+            "center":             centroid,
+            "height":             float(centroid[2]),
+            "z_coord":            float(centroid[2]),
+            "z":                  float(centroid[2]),
+            "formation_type":     "circle",
+            "target_points":      self.get_target_formation_points(),
+            "drone_info":         self.get_all_drones_initial_position(),
+            "drones_info":        self.get_all_drones_initial_position(),
+            "positions":          self.get_all_drones_initial_position(),
+            "drones_positions":   self.get_all_drones_initial_position(),
+        }
+
+    @staticmethod
+    def _resolve_args(fn: callable, known_args: dict) -> dict:
+        """Costruisce kwargs per fn dai parametri con default mancanti."""
+        try:
+            sig = inspect.signature(fn)
+        except (ValueError, TypeError):
+            return {}
+        kwargs = {}
+        for param_name, param in sig.parameters.items():
+            if param.default is inspect.Parameter.empty and param_name in known_args:
+                kwargs[param_name] = known_args[param_name]
+        return kwargs
+
+    def _apply_result(self, result) -> None:
+        """Se il risultato è un mapping {drone_id: posizione}, muove i droni e registra uno snapshot."""
+        if not isinstance(result, dict):
+            return
+        # Controlla che le chiavi siano drone id validi e i valori siano array-like di 3 coordinate
+        try:
+            assignments = {
+                int(k): np.asarray(v, dtype=float)
+                for k, v in result.items()
+                if int(k) in self.drone_ids and np.asarray(v).shape == (3,)
+            }
+        except (TypeError, ValueError):
+            return
+        if not assignments:
+            return
+        for drone_id, pos in assignments.items():
+            self.move(float(pos[0]), float(pos[1]), float(pos[2]), drone_id)
+        logger.info("[WaypointSampler] Applicato risultato: %d droni mossi", len(assignments))
+
     @staticmethod
     def _find_entry_points(code: str) -> list[str]:
         """Funzioni definite ma non chiamate da altre funzioni nel file."""
@@ -318,8 +377,19 @@ class WaypointSampler:
             logger.warning("[WaypointSampler] global_skill_code è vuoto, skip.")
             return None
 
+        import sys
+        import types
+
+        api_fns = self._build_namespace()
+        # Espone le API come modulo importabile (il codice generato fa `from swarmgpt_global_apis import ...`)
+        mod = types.ModuleType("swarmgpt_global_apis")
+        for name, val in api_fns.items():
+            if name not in ("np", "numpy"):
+                setattr(mod, name, val)
+        sys.modules["swarmgpt_global_apis"] = mod
+
         namespace: dict = {"__builtins__": __builtins__}
-        namespace.update(self._build_namespace())
+        namespace.update(api_fns)
 
         try:
             exec(compile(global_skill_code, "global_skill.py", "exec"), namespace)
@@ -330,11 +400,14 @@ class WaypointSampler:
         entry_points = self._find_entry_points(global_skill_code)
         logger.info("[WaypointSampler] Entry points trovati: %s", entry_points)
 
+        known_args = self._build_known_args()
         for name in entry_points:
             fn = namespace.get(name)
             if callable(fn):
                 try:
-                    fn()
+                    kwargs = self._resolve_args(fn, known_args)
+                    result = fn(**kwargs)
+                    self._apply_result(result)
                     logger.info("[WaypointSampler] Eseguito '%s'", name)
                 except Exception as e:
                     logger.warning("[WaypointSampler] '%s' fallita: %s", name, e)
@@ -358,6 +431,16 @@ class WaypointSampler:
 
         initial_snap = {did: self.initial_positions[did].copy() for did in self.drone_ids}
         all_snaps = [initial_snap] + self._snapshots
+
+        # Interpola tra snapshot consecutivi finché non si hanno almeno MIN_T punti
+        MIN_T = 5
+        while len(all_snaps) < MIN_T:
+            expanded = [all_snaps[0]]
+            for a, b in zip(all_snaps, all_snaps[1:]):
+                mid = {did: (a[did] + b[did]) / 2.0 for did in self.drone_ids}
+                expanded.append(mid)
+                expanded.append(b)
+            all_snaps = expanded
 
         T = len(all_snaps)
         n = len(self.drone_ids)

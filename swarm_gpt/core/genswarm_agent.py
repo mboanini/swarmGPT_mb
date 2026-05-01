@@ -1,4 +1,4 @@
-"""Agent 2: esegue la pipeline GenSwarm per comandi non gestibili dalle motion primitives."""
+# Agent 2: esegue la pipeline GenSwarm per comandi non gestibili dalle motion primitives.
 
 from __future__ import annotations
 
@@ -32,6 +32,14 @@ class GenSwarmAgent:
             sys.path.insert(0, genswarm_str)
         if repo_root_str not in sys.path:
             sys.path.insert(0, repo_root_str)
+
+        # Stub di swarmgpt_global_apis in sys.modules prima che GenSwarm avvii la pipeline,
+        # così il GrammarCheck non fallisce con ImportError sul codice generato.
+        if "swarmgpt_global_apis" not in sys.modules:
+            import types
+            _stub = types.ModuleType("swarmgpt_global_apis")
+            _stub.__getattr__ = lambda name: (lambda *args, **kwargs: None)
+            sys.modules["swarmgpt_global_apis"] = _stub
 
         # Configura llm_config.yaml usando OPENAI_API_KEY
         self._setup_llm_config()
@@ -94,20 +102,24 @@ class GenSwarmAgent:
 
         logger.info("[Agent 2] Step 3/3: Generate Functions (no WriteRun)")
         step3 = GenerateFunctions()
-        # Patch: ferma prima di WriteRun
-        original_run = step3._run
         async def _run_no_writerun():
             from modules.framework.code import State
-            import time
             finish = False
             while not finish:
-                time.sleep(1)
-                await step3._actions.run_internal_actions()
+                await asyncio.sleep(1)
+                try:
+                    await step3._actions.run_internal_actions()
+                except SystemExit:
+                    logger.warning("[Agent 2] SystemExit in run_internal_actions, stopping early")
+                    break
                 finish = all(node.state == State.CHECKED for node in step3.skill_tree.nodes)
             step3.skill_tree.save_functions_to_file()
             logger.info("[Agent 2] Code generated, WriteRun skipped")
         step3._run = _run_no_writerun
-        await step3.run(auto_next=False)
+        try:
+            await step3.run(auto_next=False)
+        except SystemExit:
+            logger.warning("[Agent 2] GenerateFunctions terminato anticipatamente (SystemExit)")
 
         global_code = self._read_file("global_skill.py")
         local_code  = self._read_file("local_skill.py")

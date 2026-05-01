@@ -1,1 +1,1 @@
-make the drones flock together avoiding obstacles
+explore the entire flying volume
