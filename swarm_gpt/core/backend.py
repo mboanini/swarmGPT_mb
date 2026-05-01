@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -21,6 +22,8 @@ from scipy.interpolate import make_smoothing_spline
 from swarm_gpt.core import Choreographer, DroneController
 from swarm_gpt.core.sim import simulate_axswarm
 from swarm_gpt.exception import LLMException
+from swarm_gpt.core.genswarm_agent import GenSwarmAgent
+from swarm_gpt.core.waypoint_sampler import WaypointSampler
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -182,6 +185,12 @@ class AppBackend:
             model_id=model_id,
             use_motion_primitives=use_motion_primitives,
         )
+        self.genswarm_agent = GenSwarmAgent(
+            workspace=Path("./workspace/genswarm"),
+            model_id=model_id,
+        )
+        self.genswarm_global_code: str = ""
+        self.genswarm_local_code: str = ""
         self.mode: Literal["preset", "real"] = "real"
         self._preset: None | str = None
         self._strict_processing = strict_processing
@@ -301,9 +310,41 @@ class AppBackend:
             logger.info("Successfully generated choreography")
             return self.choreographer.messages
         else:
-            logger.info("Agent2 code generator")
+            logger.info("[Agent 2] Routing to GenSwarm code generator")
+            self.genswarm_global_code, self.genswarm_local_code = asyncio.run(
+                self.genswarm_agent.run(
+                    command=text,
+                    task_name="free",
+                )
+            )
+            logger.info(
+                "[Agent 2] Done. global_skill.py: %d chars, local_skill.py: %d chars",
+                len(self.genswarm_global_code),
+                len(self.genswarm_local_code),
+            )
 
-        return self.choreographer.messages
+            # Estrai waypoints eseguendo global_skill.py nel simulatore mock
+            initial_positions_cm = {
+                i + 1: pos * 100.0  # 0-indexed m → 1-indexed cm (convenzione GenSwarm)
+                for i, pos in self.choreographer.starting_pos.items()
+            }
+            sampler = WaypointSampler(
+                n_drones=self.choreographer.num_drones,
+                initial_positions_cm=initial_positions_cm,
+                settings=self.settings,
+            )
+            waypoints = sampler.run(self.genswarm_global_code)
+            if waypoints is not None:
+                self.waypoints = waypoints
+                logger.info(
+                    "[Agent 2] Waypoint extraction OK: %d snapshot(s), pos shape %s",
+                    len(sampler._snapshots),
+                    waypoints["pos"].shape,
+                )
+            else:
+                logger.warning("[Agent 2] WaypointSampler non ha prodotto waypoints.")
+
+            return self.choreographer.messages
         
 
     @self_correct(n_retries=3)
