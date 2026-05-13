@@ -25,3 +25,4 @@ vicon_bridge
 catkin_ws
 
 openai_api_key.sh
+GenSwarm/config/llm_config.yaml

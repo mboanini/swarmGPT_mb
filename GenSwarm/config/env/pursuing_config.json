@@ -1,0 +1,50 @@
+{
+  "display": {
+    "#width and height note": "unit: meter",
+    "width": 5,
+    "height": 5,
+    "#scale_factor_note": "1 meter = 100 pixel",
+    "scale_factor": 100
+  },
+  "task_name": "encircling",
+  "#entity note": "position/size/perceptual_range unit: meter",
+  "#size note": "the radium of the circle # | the side length of the square robot",
+  "#agent number note": "sum of robot + leader",
+  "entities": {
+    "robot": {
+      "count": 10,
+      "specified": [],
+      "size": 0.12,
+      "color": "green",
+      "shape": "circle",
+      "perceptual_range": 1
+    },
+    "leader": {
+      "count": 0,
+      "specified": []
+    },
+    "obstacle": {
+      "count": 10,
+      "specified": [],
+      "size": 0.15,
+      "shape": "circle",
+      "color": "green"
+    },
+    "sheep": {
+      "count": 0,
+      "specified": []
+    },
+    "landmark": {
+      "count": 0,
+      "specified": []
+    },
+    "pushable_object": {
+      "count": 0,
+      "specified": []
+    }
+  },
+  "engine_type": "QuadTreeEngine",
+  "render_mode": "",
+  "output_file": "output.json",
+  "dt": 0.01
+}
