@@ -336,28 +336,120 @@ class WaypointSampler:
                 kwargs[param_name] = known_args[param_name]
         return kwargs
 
+    @staticmethod
+    def _missing_required_args(fn: callable, known_args: dict) -> list[str]:
+        """Restituisce i nomi dei parametri obbligatori non presenti in known_args."""
+        try:
+            sig = inspect.signature(fn)
+        except (ValueError, TypeError):
+            return []
+        return [
+            name for name, param in sig.parameters.items()
+            if param.default is inspect.Parameter.empty and name not in known_args
+        ]
+
     def _apply_result(self, result) -> None:
-        """Se il risultato è un mapping {drone_id: posizione}, muove i droni e registra uno snapshot."""
+        """Interpreta il risultato di un entry point e muove i droni registrando snapshot.
+
+        Gestisce due formati:
+          - {drone_id: np.array([x,y,z])}          → singolo snapshot
+          - {drone_id: [np.array, np.array, ...]}  → snapshot multipli (es. exploration)
+        """
         if not isinstance(result, dict):
             return
-        # Controlla che le chiavi siano drone id validi e i valori siano array-like di 3 coordinate
+
+        # Determina se i valori sono posizioni singole o liste di posizioni
+        sample_val = next(iter(result.values()), None)
+        if sample_val is None:
+            return
+
         try:
-            assignments = {
-                int(k): np.asarray(v, dtype=float)
-                for k, v in result.items()
-                if int(k) in self.drone_ids and np.asarray(v).shape == (3,)
-            }
+            arr = np.asarray(sample_val, dtype=float)
         except (TypeError, ValueError):
-            return
-        if not assignments:
-            return
-        for drone_id, pos in assignments.items():
-            self.move(float(pos[0]), float(pos[1]), float(pos[2]), drone_id)
-        logger.info("[WaypointSampler] Applicato risultato: %d droni mossi", len(assignments))
+            arr = None
+
+        if arr is not None and arr.shape == (3,):
+            # Formato 1: singola posizione per drone
+            assignments = {}
+            for k, v in result.items():
+                try:
+                    did = int(k)
+                    pos = np.asarray(v, dtype=float)
+                    if did in self.drone_ids and pos.shape == (3,):
+                        assignments[did] = pos
+                except (TypeError, ValueError):
+                    pass
+            if assignments:
+                for drone_id, pos in assignments.items():
+                    self.move(float(pos[0]), float(pos[1]), float(pos[2]), drone_id)
+                logger.info("[WaypointSampler] Applicato risultato: %d droni mossi", len(assignments))
+        else:
+            # Formato 2: lista di waypoints per drone → snapshot sequenziali
+            waypoint_lists: dict[int, list[np.ndarray]] = {}
+            for k, v in result.items():
+                try:
+                    did = int(k)
+                    if did not in self.drone_ids:
+                        continue
+                    wps = [np.asarray(p, dtype=float) for p in v
+                           if np.asarray(p, dtype=float).shape == (3,)]
+                    if wps:
+                        waypoint_lists[did] = wps
+                except (TypeError, ValueError):
+                    pass
+            if not waypoint_lists:
+                return
+            max_steps = max(len(wps) for wps in waypoint_lists.values())
+            logger.info("[WaypointSampler] Waypoint multipli: %d droni × %d step",
+                        len(waypoint_lists), max_steps)
+            for step in range(max_steps):
+                self._in_highlevel = True
+                for drone_id, wps in waypoint_lists.items():
+                    pos = wps[min(step, len(wps) - 1)]
+                    self.positions[drone_id] = self._clamp(pos)
+                self._in_highlevel = False
+                self._snapshot()
+
+    @staticmethod
+    def _preprocess_code(code: str) -> str:
+        """Corregge errori comuni del codice generato dall'LLM prima dell'esecuzione.
+
+        Fix applicati:
+          - `x.len(y)` → `x[len(y):]`  (lista non ha metodo .len())
+        """
+        import re
+        # `identifier.len(expr)` usato come se fosse uno slice — errore LLM frequente
+        code = re.sub(r'\b(\w+)\.len\(([^)]+)\)', r'\1[len(\2):]', code)
+        return code
+
+    @staticmethod
+    def _has_blocking_loop(code: str, fn_name: str) -> bool:
+        """Restituisce True se la funzione contiene un while True: senza break garantito.
+
+        Queste funzioni (monitoring/polling) bloccherebbero il WaypointSampler.
+        """
+        try:
+            tree = ast.parse(code)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef) and node.name == fn_name:
+                    for child in ast.walk(node):
+                        if isinstance(child, ast.While):
+                            test = child.test
+                            is_true = (
+                                (isinstance(test, ast.Constant) and test.value is True)
+                                or (isinstance(test, ast.NameConstant) and test.value is True)
+                            )
+                            if is_true:
+                                return True
+        except Exception:
+            pass
+        return False
 
     @staticmethod
     def _find_entry_points(code: str) -> list[str]:
-        """Funzioni definite ma non chiamate da altre funzioni nel file."""
+        """Funzioni definite ma non chiamate da altre funzioni nel file.
+        Esclude funzioni con loop bloccanti (while True:).
+        """
         tree = ast.parse(code)
         defined: list[str] = [
             node.name
@@ -369,13 +461,19 @@ class WaypointSampler:
             for node in ast.walk(tree)
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
         }
-        return [name for name in defined if name not in called]
+        return [
+            name for name in defined
+            if name not in called
+            and not WaypointSampler._has_blocking_loop(code, name)
+        ]
 
     def run(self, global_skill_code: str) -> dict | None:
         """Esegue global_skill_code e restituisce il dict waypoints (metri)."""
         if not global_skill_code.strip():
             logger.warning("[WaypointSampler] global_skill_code è vuoto, skip.")
             return None
+
+        global_skill_code = self._preprocess_code(global_skill_code)
 
         import sys
         import types
@@ -401,16 +499,40 @@ class WaypointSampler:
         logger.info("[WaypointSampler] Entry points trovati: %s", entry_points)
 
         known_args = self._build_known_args()
-        for name in entry_points:
-            fn = namespace.get(name)
-            if callable(fn):
+        remaining = list(entry_points)
+        # Multi-pass: separa le funzioni eseguibili da quelle con argomenti mancanti.
+        # Dopo ogni esecuzione i risultati vengono propagati come nuovi argomenti noti,
+        # consentendo di risolvere catene del tipo divide() → allocate(result_di_divide).
+        for _pass in range(len(entry_points) + 1):
+            if not remaining:
+                break
+            can_run = [n for n in remaining
+                       if not self._missing_required_args(namespace.get(n), known_args)]
+            deferred = [n for n in remaining
+                        if self._missing_required_args(namespace.get(n), known_args)]
+            if not can_run:
+                break  # nessun progresso possibile
+            for name in can_run:
+                fn = namespace.get(name)
+                if not callable(fn):
+                    continue
                 try:
                     kwargs = self._resolve_args(fn, known_args)
                     result = fn(**kwargs)
                     self._apply_result(result)
                     logger.info("[WaypointSampler] Eseguito '%s'", name)
+                    if result is not None:
+                        # Propaga il risultato ai parametri mancanti delle funzioni deferred
+                        for future_name in deferred:
+                            future_fn = namespace.get(future_name)
+                            if callable(future_fn):
+                                for param in self._missing_required_args(future_fn, known_args):
+                                    known_args[param] = result
                 except Exception as e:
                     logger.warning("[WaypointSampler] '%s' fallita: %s", name, e)
+            remaining = deferred
+        for name in remaining:
+            logger.warning("[WaypointSampler] '%s' non eseguita (argomenti non risolvibili)", name)
 
         # snapshot finale se nessuno è stato registrato o le posizioni sono cambiate
         last = self._snapshots[-1] if self._snapshots else {}

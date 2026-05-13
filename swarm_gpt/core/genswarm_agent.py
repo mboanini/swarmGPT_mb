@@ -33,13 +33,13 @@ class GenSwarmAgent:
         if repo_root_str not in sys.path:
             sys.path.insert(0, repo_root_str)
 
-        # Stub di swarmgpt_global_apis in sys.modules prima che GenSwarm avvii la pipeline,
-        # così il GrammarCheck non fallisce con ImportError sul codice generato.
+        # Registra il modulo reale swarmgpt_global_apis in sys.modules prima che GenSwarm avvii
+        # la pipeline, così il GrammarCheck non fallisce con ImportError sul codice generato.
+        # Il modulo reale restituisce defaults sicuri finché init() non viene chiamato con il
+        # backend Crazyflie (_allcfs is None → no-op / valori default).
         if "swarmgpt_global_apis" not in sys.modules:
-            import types
-            _stub = types.ModuleType("swarmgpt_global_apis")
-            _stub.__getattr__ = lambda name: (lambda *args, **kwargs: None)
-            sys.modules["swarmgpt_global_apis"] = _stub
+            import genswarm_overrides.swarmgpt_global_apis as _real_global
+            sys.modules["swarmgpt_global_apis"] = _real_global
 
         # Configura llm_config.yaml usando OPENAI_API_KEY
         self._setup_llm_config()
@@ -79,6 +79,17 @@ class GenSwarmAgent:
         self._lazy_import()
 
         logger.info(f"[Agent 2] Pipeline per: '{command}'")
+
+        # Cancella la cache pkl dal run precedente: GenSwarm marca i nodi come
+        # State.CHECKED in base ai file .pkl sul disco. Se esistono, salta il
+        # rieseguimento dell'LLM e riusa constraints/skills del task precedente.
+        for pkl_file in self.workspace.glob("*.pkl"):
+            try:
+                pkl_file.unlink()
+                logger.debug("[Agent 2] Cache invalidata: %s", pkl_file.name)
+            except OSError as e:
+                logger.warning("[Agent 2] Impossibile eliminare %s: %s", pkl_file.name, e)
+
         root_manager.update_root(str(self.workspace))
 
         # Reset singleton tra run diversi
@@ -100,7 +111,7 @@ class GenSwarmAgent:
         logger.info("[Agent 2] Step 2/3: Analyze Skills")
         await AnalyzeSkills("").run(auto_next=False)
 
-        logger.info("[Agent 2] Step 3/3: Generate Functions (no WriteRun)")
+        logger.info("[Agent 2] Step 3/3: Generate Functions (no W   riteRun)")
         step3 = GenerateFunctions()
         async def _run_no_writerun():
             from modules.framework.code import State

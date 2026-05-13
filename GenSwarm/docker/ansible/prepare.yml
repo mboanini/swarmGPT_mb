@@ -1,0 +1,77 @@
+# Ensure that the directory exists, set permissions, and assign ownership
+- name: Ensure directory exists
+  file:
+    path: /home/nvidia/docker/code_llm_ws  # The directory to be created
+    state: directory  # Ensures that the path is a directory
+    mode: 0755  # Set the permissions (rwxr-xr-x)
+    owner: nvidia  # Set the owner of the directory to 'nvidia'
+    group: nvidia  # Set the group of the directory to 'nvidia'
+
+# Copy the source code files to the target directory inside the container's workspace
+- name: copy source code
+  copy:
+    src: "{{ item }}"  # Specify the source file path
+    dest: /home/nvidia/docker/code_llm_ws/src/code_llm/  # Target directory for the copied files
+    force: yes  # Overwrite the file if it already exists
+  loop: # List of source files to be copied
+    - "../../modules/deployment/execution_scripts/omni/apis.py"
+    - "../../modules/deployment/execution_scripts/omni/run_omni.py"
+    - "../../modules/deployment/execution_scripts/omni/mqtt_server.py"
+    - "../../modules/deployment/execution_scripts/omni/velocity_limiter.py"
+    - "../../workspace/{{DATA_PATH}}/local_skill.py"  # Use environment variable PATH
+    - "../../workspace/{{DATA_PATH}}/allocate_result.pkl"  # Use environment variable PATH
+    - "../../requirements.txt"
+    - "../../msg"
+    - "../../srv"
+    - "../../package.xml"
+    - "../../CMakeLists.txt"
+    - "../code_run.Dockerfile"  # Dockerfile to run the code
+
+# Copy additional launch files needed for execution
+- name: copy launch file
+  copy:
+    src: "{{ item }}"  # Source path for launch file
+    dest: /home/nvidia/docker/code_llm_ws/src/code_llm/  # Target directory for launch file
+    force: yes  # Overwrite the file if it already exists
+  loop:
+    - "../../modules/deployment/execution_scripts/omni/launch"  # Path to the launch file
+
+# Make Python files executable (chmod +x)
+- name: make python files executable
+  shell: chmod +x run_omni.py && chmod +x mqtt_server.py && chmod +x velocity_limiter.py  # Make specific Python scripts executable
+  args:
+    chdir: /home/nvidia/docker/code_llm_ws/src/code_llm/  # Change directory to the location of the Python scripts
+
+# Pull the Docker image and tag it for use
+- name: pull image
+  shell: docker pull 10.0.2.66:6000/huabench/code-run && docker tag 10.0.2.66:6000/huabench/code-run llm_simulator  # Pull the image and assign a local tag
+  register: info  # Register the output of the command into the 'info' variable
+
+# Display the logs of the image pulling process
+- name: Show container logs
+  debug:
+    var: info.stdout_lines  # Show the stdout from the 'docker pull' command
+
+# Compile the code inside the Docker container using 'catkin_make'
+- name: compile
+  shell: docker run -it --rm -v /home/nvidia/docker/code_llm_ws:/catkin_ws llm_simulator bash -c "cd /catkin_ws && catkin_make -DPYTHON_EXECUTABLE=/usr/bin/python3"  # Compile the workspace using the specified Python version
+  become: true  # Run with escalated privileges
+  become_user: nvidia  # Replace with your ROS user
+  register: llm_code_info  # Register the output of the compile command into 'llm_code_info'
+
+# Display the logs of the compilation process
+- name: Show container logs
+  debug:
+    var: llm_code_info.stdout_lines  # Show the stdout from the 'docker run' command
+
+- name: Start LLM code container without running code
+  command: >
+    nvidia-docker run -it --rm -d
+        --name llm-code
+        -v /home/nvidia/docker/code_llm_ws:/catkin_ws
+        --workdir /catkin_ws
+        --network host
+        llm_simulator
+        bash -c "tail -f /dev/null"
+  become: true
+  become_user: nvidia  # 替换为你的 ROS 用户

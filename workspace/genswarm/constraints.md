@@ -1,4 +1,3 @@
-**Unexplored Area Detection**: Each drone must be able to detect and identify unexplored areas within its surrounding environment. The drone should prioritize moving towards these unexplored areas.
-**Maintain Minimum Distance**: Each drone must ensure a minimum distance of 40 cm from other drones at all times to avoid collisions.
-**Boundary Adherence**: Each drone must ensure it operates within the flying volume bounds: X, Y in [-200, 200] cm and Z in [20, 200] cm.
-**Controlled Velocity**: Each drone’s velocity must be controlled to ensure safe movements within the flying volume, considering both the maximum speed and dynamic conditions. 
+**Form Square**: The orchestrator must arrange the drones into a square formation with equal spacing between all adjacent drones.
+**Maintain Formation Integration**: The orchestrator must continuously monitor and adjust drone positions to maintain the square formation despite potential environmental disturbances.
+**Move Formation**: The orchestrator must move the entire square formation 1 meter (100 cm) to the right (positive X direction) while maintaining the relative positions of the drones.

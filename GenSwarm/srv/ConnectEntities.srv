@@ -1,0 +1,4 @@
+int32 self_id
+int32 target_id
+---
+bool success

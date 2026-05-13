@@ -1,92 +1,124 @@
 from swarmgpt_global_apis import get_all_drones_id,get_all_drones_initial_position,get_environment_range,get_all_drones_id,get_environment_range,get_all_drones_initial_position,get_target_formation_points,get_prey_initial_position,get_initial_unexplored_areas,get_quadrant_target_position,move,move_z,rotate,form_circle,center,swap,form_star,form_cone,polygon
 import numpy as np
+import time
 
-def fetch_environment_range():
-    """
-    Description: Retrieve the 3D bounds of the flying volume. This function doesn't take inputs and returns the bounds as a dictionary.
-    
-    Returns:
-        dict: A dictionary containing the bounds of the flying volume with keys {x_min, x_max, y_min, y_max, z_min, z_max} and corresponding integer values in centimeters.
-    """
-    # Call the global API to get the environment range
-    environment_bounds = get_environment_range()
-    
-    return environment_bounds
-
-
-def fetch_all_drones_info():
+def form_square(drone_ids=None, z_height=100):
     """
     Description:
-    Fetch the IDs and initial positions of all drones in the flying volume.
-    This function gathers information about all drones using available APIs,
-    integrating the drone IDs and their initial 3D positions into a single dictionary.
+        Arrange drones in a square formation with equal spacing between all adjacent drones.
+        The function:
+        - Fetches the drone IDs and initial positions.
+        - Computes optimal square formation based on the number of drones and environment bounds.
+        - Moves the drones to the computed positions.
     
-    Params:
-        None: This function does not take any parameters.
+    params:
+        drone_ids: list, Optional list of drone IDs. If not provided, all available drones will be used.
+        z_height: int, Optional height in cm at which the square formation should be created. Defaults to 100 cm.
     
-    Return:
-        dict: A dictionary where the keys are drone IDs (int) and the values are 
-              their respective initial positions as numpy arrays [x, y, z] in cm.
-              Example: {1: np.array([0, 0, 50]), 2: np.array([10, -10, 70]), ...}
+    return:
+        None
     """
-    # Retrieve the list of all drone IDs
+    
+    if drone_ids is None:
+        drone_ids = get_all_drones_id()
+    
+    num_drones = len(drone_ids)
+    
+    if num_drones < 4:
+        return  # Not enough drones to form a square
+    
+    side_length = int(np.ceil(np.sqrt(num_drones)))
+    spacing = 40  # Minimum spacing requirement
+
+    # Compute initial positions of the grid
+    formation_positions = []
+    for i in range(int(side_length)):
+        for j in range(int(side_length)):
+            idx = i * int(side_length) + j
+            if idx < num_drones:
+                x = j * spacing
+                y = i * spacing
+                formation_positions.append((x, y, z_height))
+
+    # Center the grid in the environment bounds
+    x_min, x_max, y_min, y_max, z_min, z_max = get_environment_range().values()
+    x_offset = (x_max + x_min) / 2 - (side_length - 1) * spacing / 2
+    y_offset = (y_max + y_min) / 2 - (side_length - 1) * spacing / 2
+    
+    # Move drones to their target positions
+    for drone_id, pos in zip(drone_ids, formation_positions):
+        x, y, z = pos
+        move(x + x_offset, y + y_offset, z, drone_id)
+    
+    # Move 1 meter to the right
+    time.sleep(1)  # Assuming some delay before the next movement
+    for drone_id, pos in zip(drone_ids, formation_positions):
+        x, y, z = pos
+        move(x + x_offset + 100, y + y_offset, z, drone_id)
+
+
+def monitor_and_maintain_square(monitor_interval=0.5):
+    """
+    Description:
+    Continuously monitor and adjust drone positions to maintain the square formation,
+    and move the entire formation 1 meter (100 cm) to the right (positive X direction).
+    The function ensures that drones maintain the desired relative positions at all times,
+    taking into account potential environmental disturbances. The function runs a loop
+    to repeatedly check and correct drone positions until they reach the target location.
+    
+    params:
+        monitor_interval: float, The time interval (in seconds) between successive monitoring checks.
+        
+    return:
+        None
+    """
+    
+    def get_positions(drone_ids):
+        positions = get_all_drones_initial_position()
+        return {drone_id: positions[drone_id] for drone_id in drone_ids}
+    
+    def monitor_and_correct_formation(drone_ids, target_positions):
+        current_positions = get_positions(drone_ids)
+        for drone_id in drone_ids:
+            current_pos = current_positions[drone_id]
+            target_pos = target_positions[drone_id]
+            # Check if any drone is significantly deviating
+            if np.linalg.norm(current_pos - target_pos) > 5:  # example threshold of 5 cm
+                move(target_pos[0], target_pos[1], target_pos[2], drone_id)
+        
+    # Step 1: Fetch required data
     drone_ids = get_all_drones_id()
     
-    # Retrieve the initial positions of all drones
-    initial_positions = get_all_drones_initial_position()
+    # Step 2: Form initial square
+    form_square(drone_ids)
     
-    # Combine the two into a single dictionary
-    drone_info = {drone_id: np.array(position) for drone_id, position in initial_positions.items()}
+    # Step 3: Move the square formation to the right by 100 cm as a whole
+    move_square_formation()
     
-    return drone_info
+    # Step 4: Monitor and maintain the formation
+    initial_positions = get_positions(drone_ids)
+    target_positions = {drone_id: pos + np.array([100, 0, 0]) for drone_id, pos in initial_positions.items()}
+    
+    for _ in range(20):  # Adjust the range value as needed to ensure stability
+        monitor_and_correct_formation(drone_ids, target_positions)
+        time.sleep(monitor_interval)
 
 
-def assign_quadrants_to_drones(bounds, drone_info):
+def move_square_formation():
     """
-    Description:
-    Divide the flying volume into quadrants and assign each drone a distinct quadrant to explore. 
-    Takes the bounds of the flying volume and the initial positions of all drones. Returns a dictionary 
-    mapping drone_ids to their respective target quadrants.
+    Description: Move the entire square formation of drones 1 meter (100 cm) to the right (positive X direction) while maintaining the relative positions of the drones.
     
-    Params:
-        bounds (dict): A dictionary containing the bounds of the flying volume with keys {x_min, x_max, y_min, y_max, z_min, z_max} and corresponding integer values in centimeters. Example: {'x_min': -200, 'x_max': 200, 'y_min': -200, 'y_max': 200, 'z_min': 20, 'z_max': 200}.
-        drone_info (dict): A dictionary where the keys are drone IDs (int) and the values are their respective initial positions as numpy arrays [x, y, z] in cm. Example: {1: np.array([0, 0, 50]), 2: np.array([10, -10, 70]), ...}.
-    
-    Returns:
-        dict: A dictionary mapping drone IDs to their respective quadrants as numpy arrays [x, y, z] representing the center of the assigned quadrant in cm.
+    params:
+        None
+    return:
+        None
     """
+    # Step 1: Get initial positions of all drones
+    drone_positions = get_all_drones_initial_position()
     
-    # Calculate the midpoints in each dimension to divide the space into 8 quadrants
-    mid_x = (bounds['x_min'] + bounds['x_max']) // 2
-    mid_y = (bounds['y_min'] + bounds['y_max']) // 2
-    mid_z = (bounds['z_min'] + bounds['z_max']) // 2
+    # Step 2: Compute target positions
+    target_positions = {drone_id: pos + np.array([100, 0, 0]) for drone_id, pos in drone_positions.items()}
     
-    # Generate the centers of the 8 quadrants
-    quadrants_centers = [
-        np.array([(x1 + x2) // 2, (y1 + y2) // 2, (z1 + z2) // 2])
-        for x1, x2 in [(bounds['x_min'], mid_x), (mid_x, bounds['x_max'])] 
-        for y1, y2 in [(bounds['y_min'], mid_y), (mid_y, bounds['y_max'])]
-        for z1, z2 in [(bounds['z_min'], mid_z), (mid_z, bounds['z_max'])]
-    ]
-    
-    # Ensure there are at least as many quadrants as drones
-    num_drones = len(drone_info)
-    if num_drones > len(quadrants_centers):
-        raise Exception("Not enough quadrants for the number of drones.")
-    
-    # Assign drones to nearest quadrants
-    drone_to_quadrant = {}
-    unassigned_quadrants = quadrants_centers.copy()
-    
-    for drone_id, initial_pos in drone_info.items():
-        min_distance = float('inf')
-        closest_quadrant = None
-        for quadrant in unassigned_quadrants:
-            distance = np.linalg.norm(initial_pos - quadrant)
-            if distance < min_distance:
-                min_distance = distance
-                closest_quadrant = quadrant
-        drone_to_quadrant[drone_id] = closest_quadrant
-        unassigned_quadrants.remove(closest_quadrant)  # Remove the assigned quadrant from the list
-    
-    return drone_to_quadrant
+    # Step 3: Move each drone to its new target position
+    for drone_id, target_pos in target_positions.items():
+        move(target_pos[0], target_pos[1], target_pos[2], drone_id)

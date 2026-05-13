@@ -1,1 +1,1 @@
-explore the entire flying volume
+Form a square and maintain the formation by moving 1 meter to the right

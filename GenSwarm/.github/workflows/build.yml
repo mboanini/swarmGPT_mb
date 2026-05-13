@@ -1,0 +1,22 @@
+name: build
+on: [pull_request, push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install docker-compose
+        run: |
+          curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          chmod +x /usr/local/bin/docker-compose
+
+      - name: Run tests
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
+        run: docker-compose -f ci/docker-compose.yml up python_build
