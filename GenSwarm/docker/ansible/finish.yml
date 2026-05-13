@@ -1,0 +1,2 @@
+- name: Stop LLM code
+  command: docker container stop llm-code

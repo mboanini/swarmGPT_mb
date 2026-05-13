@@ -1,0 +1,3 @@
+- 找一台小车，修改 code_run.Dockerfile
+- docker build -t 10.0.2.66:6000/huabench/code-run -f code_run.Dockerfile .
+- docker push 10.0.2.66:6000/huabench/code-run

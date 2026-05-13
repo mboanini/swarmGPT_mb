@@ -1,0 +1,18 @@
+- name: Copy Source Code
+  hosts: SWARM
+  become: yes  # Elevate privilege to execute the tasks with elevated rights
+  become_method: sudo  # Use sudo to become the specified user
+  become_user: root  # Execute tasks as the root user
+  vars:
+    ansible_become_pass: 123
+    stage: "{{ STAGE }}"
+
+  tasks:
+    - include_tasks: prepare.yml
+      when: stage == '0'
+
+    - include_tasks: run.yml
+      when: stage == '1'
+
+    - include_tasks: finish.yml
+      when: stage == '2'

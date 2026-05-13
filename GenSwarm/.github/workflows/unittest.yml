@@ -1,0 +1,37 @@
+name: Run Unit Tests with Docker
+
+on:
+  pull_request:
+    branches:
+      - develop
+  push:
+    branches:
+      - '*'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Install docker-compose
+      run: |
+        curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+        chmod +x /usr/local/bin/docker-compose
+
+    - name: Run unit tests in Docker container
+      env:
+        API_KEY: ${{ secrets.LLM_API_KEY }}
+        API_BASE: ${{ secrets.LLM_API_BASE }}
+        PYTHON_VERSION: "3.10"
+      run: docker-compose -f ci/docker-compose.yml up unittest
+
+    - uses: codecov/codecov-action@v4
+      with:
+        fail_ci_if_error: true # optional (default = false)
+        # files: ${{ github.workspace }}/coverage.xml
+        # flags: unittests # optional
+        # name: codecov-umbrella # optional
+        token: ${{ secrets.CODECOV_TOKEN }} # required
+        # verbose: true # optional (default = false)
