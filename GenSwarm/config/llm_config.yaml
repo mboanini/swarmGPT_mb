@@ -1,6 +1,6 @@
 api_base:
   GPT: https://api.openai.com/v1
 api_key:
-  GPT: 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
+  GPT: 
 model:
   GPT: gpt-4o-2024-05-13
