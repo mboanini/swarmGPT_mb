@@ -21,6 +21,7 @@ rosdep = "*"
 pcl = ">=1.14.1,<2"
 uv = ">=0.7.13,<0.8"
 fire = ">=0.7.0,<0.8"
+rowan = "*"
 
 [target.linux.dependencies]
 libgl-devel = "*"
@@ -28,6 +29,8 @@ libgl-devel = "*"
 [pypi-dependencies]
 ruff = ">=0.13.0,<0.14"
 crazyflow = ">=0.0.2"
+mujoco = "==3.3.6"
+mujoco-mjx = "==3.3.6"
 pytest = "*"
 
 [environments]
@@ -47,7 +50,7 @@ docs-build = { cmd = "mkdocs build", description = "Build docs" }
 
 [activation]
 scripts = [
-    # "submodules/crazyswarm2/install/setup.bash",
-    # "submodules/vicon_ws/install/setup.bash",
+    "submodules/crazyswarm2/ros_ws/install/setup.bash",
+    "submodules/vicon_ws/install/setup.bash",
     "openai_api_key.sh"
     ]

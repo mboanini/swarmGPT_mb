@@ -126,7 +126,17 @@ class Choreographer:
             cfg = yaml.safe_load(f)
         with open(Path(__file__).resolve().parents[1] / "data/settings.yaml", "r") as f:
             self.settings = yaml.safe_load(f)
-        robots = sorted(cfg["crazyflies"], key=lambda x: x["id"])
+        ros2_params = cfg.get("/crazyflie_server", {}).get("ros__parameters", {})
+        raw_robots = ros2_params.get("robots", cfg.get("crazyflies", {}))
+        # Support both ROS2 dict format and legacy ROS1 list format
+        if isinstance(raw_robots, dict):
+            robots = sorted(
+                [{"id": int(name.lstrip("cf")), "initialPosition": data["initial_position"]}
+                 for name, data in raw_robots.items()],
+                key=lambda x: x["id"],
+            )
+        else:
+            robots = sorted(raw_robots, key=lambda x: x["id"])
 
         for i, robot in enumerate(robots):
             self.agents[i] = int(robot["id"])

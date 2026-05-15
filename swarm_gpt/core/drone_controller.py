@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import time
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, List
 
 logging._srcfile = None  # Fix logging with rclpy when installed via conda
@@ -39,19 +38,47 @@ class DroneController:
             freq: The frequency at which the controller publishes the drone positions.
         """
         self.freq = freq
+        self._ros_running = False
+
+        # Initialize rclpy so we can check if crazyflie_server is running
         try:
             if not rclpy.ok():
                 rclpy.init()
-            self._ros_running = True
         except Exception:
-            self._ros_running = False
-        if not self._ros_running:
             logger.warning("ROS 2 is not running. The drone controller will not be initialized.")
             return
+
+        # Non-blocking check: skip Crazyswarm init if crazyflie_server is not up
+        # (Crazyswarm blocks indefinitely on wait_for_service() if the server is absent)
+        check_node = rclpy.create_node("swarmgpt_init_check")
+        try:
+            running_nodes = check_node.get_node_names()
+        except Exception:
+            running_nodes = []
+        finally:
+            check_node.destroy_node()
+
+        if "crazyflie_server" not in running_nodes:
+            logger.warning("crazyflie_server not running. The drone controller will not be initialized.")
+            return
+
+        # crazyflie_server is up — Crazyswarm calls rclpy.init() internally,
+        # patch it to a no-op since we already initialized above
+        _orig_init = rclpy.init
+        rclpy.init = lambda *a, **kw: None
+        try:
+            logger.info("Initializing crazyswarm2")
+            self.swarm = pycrazyswarm.Crazyswarm()
+            self._ros_running = True
+        except Exception as e:
+            logger.warning(f"Failed to initialize crazyswarm2: {e}")
+        finally:
+            rclpy.init = _orig_init
+
+        if not self._ros_running:
+            return
+
         self._node = Node("swarm_gpt_controller")
-        cfg_path = Path(__file__).resolve().parents[3] / "config" / "crazyflies.yaml"
-        logger.info("Initializing crazyswarm2")
-        self.swarm = pycrazyswarm.Crazyswarm(str(cfg_path))
         self.cmd_pos_pub = {
             id: self._node.create_publisher(Position, f"/cf{id}/cmd_position/", 1)
             for id in self.swarm.allcfs.crazyfliesById.keys()
