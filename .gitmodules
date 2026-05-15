@@ -1,0 +1,6 @@
+[submodule "submodules/crazyswarm2"]
+	path = submodules/crazyswarm2
+	url = https://github.com/IMRCLab/crazyswarm2.git
+[submodule "submodules/vicon_ws/src/motion_capture_tracking"]
+	path = submodules/vicon_ws/src/motion_capture_tracking
+	url = https://github.com/IMRCLab/motion_capture_tracking.git

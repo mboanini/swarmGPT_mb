@@ -1,0 +1,16 @@
+motion_capture_tracking:
+  ros__parameters:
+    type: "vicon"
+    hostname: "192.168.0.1"     # IP del PC Vicon — sovrascrivibile da CLI
+    port: 801
+    object_tracking_type: "motionCapture"
+    publish_tf: true
+    rigid_bodies:
+      # Elenca qui i nomi degli oggetti Vicon, uno per drone.
+      # Il nome deve corrispondere esattamente a quello configurato in Vicon Tracker.
+      # Esempio per 5 droni:
+      - name: "cf1"
+      - name: "cf2"
+      - name: "cf3"
+      - name: "cf4"
+      - name: "cf5"

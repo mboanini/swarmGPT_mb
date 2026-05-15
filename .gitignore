@@ -18,6 +18,13 @@ sandbox/
 /video
 site
 
+# ROS2 build artifacts
+install/
+log/
+submodules/vicon_ws/build/
+submodules/vicon_ws/install/
+submodules/vicon_ws/log/
+
 # submodules
 crazyswarm
 axswarm
