@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import mujoco
 import numpy as np
+# rospkg -> ament
 from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
 from scipy.spatial.transform import Rotation as R
 
@@ -33,6 +34,7 @@ def get_ros_package_path(pkg: str, heuristic_search: bool = False) -> Path:
         The share directory path of the ROS 2 package.
     """
     try:
+        # rospkg.RosPack().get_path(pkg) -> get_package_share_directory(pkg)
         return Path(get_package_share_directory(pkg))
     except PackageNotFoundError as e:
         if not heuristic_search:

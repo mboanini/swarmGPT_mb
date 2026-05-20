@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 try:
+    # pycrazyswarm -> crazyflie_py
     import crazyflie_py as pycrazyswarm  # noqa: F401
 except ImportError:
     path = get_ros_package_path("crazyswarm2", heuristic_search=True)
@@ -19,6 +20,7 @@ except ImportError:
     import crazyflie_py as pycrazyswarm  # noqa: F401
 
 try:
+    # crazyswarm.msg -> crazyflie_interfaces.msg
     from crazyflie_interfaces.msg import Position  # noqa: F401
 except ImportError:
     # Mock the import of crazyflie_interfaces in case we are only running in sim, i.e. without ROS 2

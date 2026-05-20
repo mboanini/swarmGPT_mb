@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable, List
 
 logging._srcfile = None  # Fix logging with rclpy when installed via conda
 import numpy as np  # noqa: E402
+# rospy -> rclpy
 import rclpy  # noqa: E402
 import rclpy.time  # noqa: E402
 from rclpy.node import Node  # noqa: E402
@@ -41,6 +42,7 @@ class DroneController:
         self._ros_running = False
 
         # Initialize rclpy so we can check if crazyflie_server is running
+        # if rclpy.ok() + check if crazyflie_server in exec
         try:
             if not rclpy.ok():
                 rclpy.init()
@@ -80,6 +82,7 @@ class DroneController:
 
         self._node = Node("swarm_gpt_controller")
         self.cmd_pos_pub = {
+            # rospy.Publisher(...) -> self._node.create_publisher(...)
             id: self._node.create_publisher(Position, f"/cf{id}/cmd_position/", 1)
             for id in self.swarm.allcfs.crazyfliesById.keys()
         }
@@ -138,6 +141,7 @@ class DroneController:
             target_height: The target height.
             duration: The duration of the takeoff.
         """
+        # rospy.Rate(...) -> self._node.create_rate(...)
         rate = self._node.create_rate(self.freq)
         drone_pos = {
             drone_id: self.swarm.allcfs.crazyfliesById[drone_id].position()

@@ -50,7 +50,6 @@ docs-build = { cmd = "mkdocs build", description = "Build docs" }
 
 [activation]
 scripts = [
-    "submodules/crazyswarm2/ros_ws/install/setup.bash",
-    "submodules/vicon_ws/install/setup.bash",
+    "install/setup.bash",
     "openai_api_key.sh"
     ]

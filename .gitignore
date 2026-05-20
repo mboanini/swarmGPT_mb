@@ -32,3 +32,13 @@ vicon_bridge
 catkin_ws
 
 openai_api_key.sh
+
+# submodules
+submodules/crazyswarm2/ros_ws/install/
+submodules/crazyswarm2/ros_ws/build/
+submodules/crazyswarm2/ros_ws/log/
+submodules/crazyswarm2/ros_ws/install/**
+submodules/crazyswarm2/ros_ws/build/**
+submodules/crazyswarm2/ros_ws/log/**
+**/COLCON_IGNORE
+**/.built_by
