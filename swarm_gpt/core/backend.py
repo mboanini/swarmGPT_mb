@@ -339,20 +339,20 @@ class AppBackend:
             cfs = {k: v for k, v in cfs.items() if k in drone_ids}
             self.drone_controller.swarm.allcfs.crazyfliesById = cfs
 
-        for i, drone in enumerate(self.drone_controller.swarm.allcfs.crazyfliesById.values()):
-            drone.setLEDColor(*colors[i % len(colors)])
+        # for i, drone in enumerate(self.drone_controller.swarm.allcfs.crazyfliesById.values()):
+        #     drone.setLEDColor(*colors[i % len(colors)])
 
-        original_song = self.music_manager.song
+        # original_song = self.music_manager.song
         duration = next(iter(self.waypoints.values()))[-1, 0]
-        try:
-            self.music_manager.song = original_song + "[deploy]"
-        except AssertionError:
-            pass
+        # try:
+        #     self.music_manager.song = original_song + "[deploy]"
+        # except AssertionError:
+        #     pass
         self.drone_controller.takeoff(target_height=1.0, duration=3.0)
-        self.music_manager.play()
+        #self.music_manager.play()
         self.drone_controller.run_spline_trajectories(self.splines, duration=duration)
         self.drone_controller.land()
-        self.music_manager.song = original_song
+        # self.music_manager.song = original_song
         logger.info("Deployment successful")
 
     def load_preset(self, preset_id: str) -> list[dict[str, str]]:

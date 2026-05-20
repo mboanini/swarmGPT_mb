@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """Import utility package to deal with any crazyswarm2 import issues."""
 
 import logging

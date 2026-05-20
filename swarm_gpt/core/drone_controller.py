@@ -60,9 +60,9 @@ class DroneController:
         finally:
             check_node.destroy_node()
 
-        if "crazyflie_server" not in running_nodes:
-            logger.warning("crazyflie_server not running. The drone controller will not be initialized.")
-            return
+        # if "crazyflie_server" not in running_nodes:
+        #     logger.warning("crazyflie_server not running. The drone controller will not be initialized.")
+        #     return
 
         # crazyflie_server is up — Crazyswarm calls rclpy.init() internally,
         # patch it to a no-op since we already initialized above
@@ -80,16 +80,18 @@ class DroneController:
         if not self._ros_running:
             return
 
+
         self._node = Node("swarm_gpt_controller")
         self.cmd_pos_pub = {
             # rospy.Publisher(...) -> self._node.create_publisher(...)
-            id: self._node.create_publisher(Position, f"/cf{id}/cmd_position/", 1)
+            id: self._node.create_publisher(Position, f"/cf{id}/cmd_position", 1)
             for id in self.swarm.allcfs.crazyfliesById.keys()
         }
         self.real_pos_pub = {
-            id: self._node.create_publisher(Position, f"/cf{id}/real_position/", 1)
+            id: self._node.create_publisher(Position, f"/cf{id}/real_position", 1)
             for id in self.swarm.allcfs.crazyfliesById.keys()
         }
+
 
     def requires_ros(fn: Callable) -> Callable:
         """Check if ROS 2 is running before calling the function.
@@ -273,6 +275,8 @@ class DroneController:
         rate = self._node.create_rate(self.freq)
         drones = self.swarm.allcfs.crazyfliesById
         drone_ids = set(drones.keys())
+        print(len(splines))
+        print(splines)
         vel_splines = {i: [s.derivative() for s in splines[i]] for i in drone_ids}
 
         tstart = time.perf_counter()

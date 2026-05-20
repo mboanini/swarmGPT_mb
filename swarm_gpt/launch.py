@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 
 import fire
+import sys
+sys.path.append('/data/home/crazyflie/Documents/swarmGPT_mb/')
 
 from swarm_gpt.core import AppBackend
 from swarm_gpt.ui import create_ui
