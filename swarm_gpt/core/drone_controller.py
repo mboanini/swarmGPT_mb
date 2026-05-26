@@ -11,6 +11,7 @@ import numpy as np  # noqa: E402
 # rospy -> rclpy
 import rclpy  # noqa: E402
 import rclpy.time  # noqa: E402
+from geometry_msgs.msg import PoseStamped  # noqa: E402
 from rclpy.node import Node  # noqa: E402
 
 # The crazyflie_py package does not have a proper installation setup, and crazyswarm2 is potentially
@@ -91,6 +92,17 @@ class DroneController:
             id: self._node.create_publisher(Position, f"/cf{id}/real_position", 1)
             for id in self.swarm.allcfs.crazyfliesById.keys()
         }
+        self._drone_pos: dict[int, np.ndarray] = {}
+        for drone_id in self.swarm.allcfs.crazyfliesById.keys():
+            cf_name = self.swarm.allcfs.crazyfliesById[drone_id].name
+            self._node.create_subscription(
+                PoseStamped,
+                f"/{cf_name}/pose",
+                lambda msg, did=drone_id: self._drone_pos.__setitem__(
+                    did, np.array([msg.pose.position.x, msg.pose.position.y, msg.pose.position.z])
+                ),
+                1,
+            )
 
 
     def requires_ros(fn: Callable) -> Callable:
@@ -145,10 +157,12 @@ class DroneController:
         """
         # rospy.Rate(...) -> self._node.create_rate(...)
         rate = self._node.create_rate(self.freq)
-        drone_pos = {
-            drone_id: self.swarm.allcfs.crazyfliesById[drone_id].position()
-            for drone_id in self.swarm.allcfs.crazyfliesById.keys()
-        }
+        # drone_pos = {
+        #     drone_id: self.swarm.allcfs.crazyfliesById[drone_id].position()
+        #     for drone_id in self.swarm.allcfs.crazyfliesById.keys()
+        # }
+        rclpy.spin_once(self._node, timeout_sec=1.0)
+        drone_pos = {drone_id: self._drone_pos[drone_id].copy() for drone_id in self.swarm.allcfs.crazyfliesById.keys()}
 
         for tau in np.linspace(0, 1, int(duration * self.freq)):
             for drone_id in self.swarm.allcfs.crazyfliesById.keys():
@@ -172,10 +186,8 @@ class DroneController:
             duration: The duration of the landing.
         """
         rate = self._node.create_rate(self.freq)
-        drone_pos = {
-            drone_id: self.swarm.allcfs.crazyfliesById[drone_id].position()
-            for drone_id in self.swarm.allcfs.crazyfliesById.keys()
-        }
+        rclpy.spin_once(self._node, timeout_sec=1.0)
+        drone_pos = {drone_id: self._drone_pos[drone_id].copy() for drone_id in self.swarm.allcfs.crazyfliesById.keys()}
 
         for tau in np.linspace(0, 1, int(duration * self.freq)):
             for drone_id in self.swarm.allcfs.crazyfliesById.keys():
