@@ -397,5 +397,16 @@ import numpy as np
 
             all_positions = new_positions
 
-        # Shape: (n_drones, n_steps, 3)
-        return np.array([waypoints_per_drone[i] for i in range(n_drones)])
+        # Build the waypoints dict expected by simulate_axswarm / sim.py:
+        # "pos"/"vel"/"acc": (n_drones, n_steps+1, 3), "time": (n_drones, n_steps+1)
+        pos_agent = np.array([waypoints_per_drone[i] for i in range(n_drones)])  # (n_drones, n_steps, 3)
+        start_pos = np.array([starting_pos[i] for i in range(n_drones)])         # (n_drones, 3)
+        pos = np.concatenate([start_pos[:, None, :], pos_agent], axis=1)         # (n_drones, n_steps+1, 3)
+        timestamps = np.arange(n_steps + 1) * 0.5                                # (n_steps+1,)
+        t = np.tile(timestamps, (n_drones, 1))                                   # (n_drones, n_steps+1)
+        return {
+            "time": t,
+            "pos": pos,
+            "vel": np.zeros_like(pos),
+            "acc": np.zeros_like(pos),
+        }

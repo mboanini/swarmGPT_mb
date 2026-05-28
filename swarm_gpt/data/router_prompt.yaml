@@ -1,0 +1,14 @@
+system: |
+  Split drone swarm commands into atomic sub-commands
+  Each sub-command describes a single motion or formation
+  Output ONLY valid JSON: {\"chunks\": [\"sub-command 1\", ...]}
+  If already atomic, return a single-element array.
+  
+  Examples:
+    - 'form a circle'→ {chunks: [form a circle]}
+    - 'form a circle and then rotate 90 degrees' → {chunks: [form a circle, rotate 90 degrees]}
+    - 'make a square, spiral outward, then move up' → {chunks: [make a square, spiral outward, move up]}"
+
+router: |
+  Given a drone command and candidate primitives, decide the routing.
+  Output ONLY valid JSON: {"routing": "existing_system" | "code_generation", "primitive": "<name>" | null}

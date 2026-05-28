@@ -11,12 +11,21 @@ logger = logging.getLogger(__name__)
 try:
     import pycrazyswarm  # noqa: F401
 except ImportError:
-    path = get_ros_package_path("crazyswarm", heuristic_search=True)
-    pycrazyswarm_path = path / "scripts"
-    if str(pycrazyswarm_path) not in sys.path:
-        sys.path.insert(0, str(pycrazyswarm_path))
+    # path = get_ros_package_path("crazyswarm", heuristic_search=True)
+    # pycrazyswarm_path = path / "scripts"
+    # if str(pycrazyswarm_path) not in sys.path:
+    #     sys.path.insert(0, str(pycrazyswarm_path))
 
-    import pycrazyswarm  # noqa: F401
+    # import pycrazyswarm  # noqa: F401
+    try:
+        path = get_ros_package_path("crazyswarm", heuristic_search=True)
+        pycrazyswarm_path = path / "scripts"
+        if str(pycrazyswarm_path) not in sys.path:
+            sys.path.insert(0, str(pycrazyswarm_path))
+        import pycrazyswarm  # noqa: F401
+    except Exception:
+        logger.warning("pycrazyswarm not found. Mocking with None (simulation-only mode).")
+        pycrazyswarm = None
 
 try:
     from crazyswarm.msg import Position  # noqa: F401

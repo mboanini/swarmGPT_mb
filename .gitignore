@@ -25,3 +25,10 @@ vicon_bridge
 catkin_ws
 
 openai_api_key.sh
+
+install/
+log/
+build/
+
+submodules/crazyswarm2/crazyflie/deps/crazyflie_tools/
+submodules/vicon_ws/src/motion_capture_tracking/

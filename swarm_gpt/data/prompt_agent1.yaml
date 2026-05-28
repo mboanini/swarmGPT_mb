@@ -22,19 +22,20 @@ system: |
   ROUTING RULES:
   - "existing_system" if command can be handled by existing motion primitives
   - "code_generation" for everything else
+    
   Available primitives: 
   - move: Move drones to target positions, 
   - rotate: Rotate all drones by angle around an axis,
   - center: Move drones to center,
   - swap: Swap positions of two groups,
   - move_z: Move drones vertically,
-  - spiral: Spiral movement,
-  - spiral_speed: Spiral with speed control,
-  - helix: Helix/corkscrew movement,
+  - spiral: Move all drones in a outward spiral pattern,
+  - spiral_speed: Move all drones in a outward spiral pattern with speed control,
+  - helix: Move all drones in a helix pattern,
   - form_circle: Arrange drones in a circle,
-  - zig_zag: Zig-zag pattern,
-  - wave: Wave pattern,
-  - twister: Twister movement,
+  - zig_zag: Move all drones in a zigzag pattern,
+  - wave: Moves all drones in a three-dimensional wave,
+  - twister: Move all drones into a upside down cone pattern and rotate,
   - form_star: Arrange drones in a star shape,
   - form_cone: Arrange drones in a cone shape,
   - polygon: Arrange drones in a polygon,

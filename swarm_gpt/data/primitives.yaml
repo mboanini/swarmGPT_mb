@@ -1,0 +1,59 @@
+move:
+  description: "Moves drones to ABSOLUTE position"
+  n_args: 4
+
+move_z:
+  description: "Moves drones up/down by distance"
+  n_args: 2
+
+rotate:
+  description: "Rotates the ENTIRE formation by angle around an axis"
+  n_args: 2
+
+form_circle:
+  description: "Arranges drones in a circle at a given height"
+  n_args: 2
+
+center:
+  description: "Groups drones into a tight circle centered at the swarm's current centroid"
+  n_args: 1 
+
+swap:
+  description: "Swaps positions of two drones"
+  n_args: 2
+
+form_star:
+  description: "Arranges drones in a star/flower pattern at a given height"
+  n_args: 3
+
+form_cone:
+  description: "Arranges drones in a cone shape"
+  n_args: 3
+
+polygon:
+  description: "Arranges all drones in a regular polygon with a given nr of sides at a given height, such as triangle, square, pentagon, hexagon"
+  n_args: 2
+
+spiral:
+  description: "Moves all drones in a outward spiral pattern"
+  n_args: 2
+
+spiral_speed:
+  description: "Moves all drones in a outward spiral pattern with speed control"
+  n_args: 4
+
+helix:
+  description: "Drones rise while orbiting in a helix pattern"
+  n_args: 3
+
+twister:
+  description: "Spinning cone that rotates while moving vertically"
+  n_args: 3
+
+zig_zag:
+  description: "Moves drones in a zigzag pattern"
+  n_args: 3
+
+wave:
+  description: "Arranges drones in a complex wave pattern"
+  n_args: 5

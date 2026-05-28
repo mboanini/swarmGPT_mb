@@ -20,6 +20,7 @@ from swarm_gpt.core.motion_primitives import motion_primitives as motion_primiti
 from swarm_gpt.core.motion_primitives import primitive_by_name
 from swarm_gpt.exception import LLMFormatError, LLMPlanError, LLMResponseProcessingError, LLMException
 from swarm_gpt.core.agent2 import Agent2
+from swarm_gpt.core.router import Router
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -62,7 +63,11 @@ class Choreographer:
         self.agent2 = Agent2(
             call_llm_fn=self._call_openai,
             prompts_path=Path(__file__).resolve().parents[1] / "data/prompt_agent2.yaml"
-)
+        )
+        self.router = Router(
+            primitives_path=Path(__file__).resolve().parents[1] / "data/primitives.yaml",
+            openai_client=client
+        )
         # Load prompts from file
         # prompt = "prompts_no_music"
         prompt = "prompts_prim" if self.use_motion_primitives else "prompts_no_music"
@@ -104,21 +109,23 @@ class Choreographer:
     #     return result
 
     def analyze_command(self, command: str) -> dict:
-        """Agent 1: Analyze a natural language command."""
-        msgs = [
-            {"role": "system", "content": self.prompts_a1["system"]},
-            {"role": "user", "content": f"Analyze this drone swarm command:\n\n{command}"}
-        ]
-        response = self._call_openai(msgs)
-        # Strip markdown code blocks if present
-        if "```json" in response:
-            response = response.split("```json")[1].split("```")[0].strip()
-        elif "```" in response:
-            response = response.split("```")[1].split("```")[0].strip()
+        # """Agent 1: Analyze a natural language command."""
+        # msgs = [
+        #     {"role": "system", "content": self.prompts_a1["system"]},
+        #     {"role": "user", "content": f"Analyze this drone swarm command:\n\n{command}"}
+        # ]
+        # response = self._call_openai(msgs)
+        # # Strip markdown code blocks if present
+        # if "```json" in response:
+        #     response = response.split("```json")[1].split("```")[0].strip()
+        # elif "```" in response:
+        #     response = response.split("```")[1].split("```")[0].strip()
         
-        result = json.loads(response)
-        result["original_command"] = command
-        return result
+        # result = json.loads(response)
+        # result["original_command"] = command
+        # return result
+        """Route a natural language command using semantic router."""
+        return self.router.route(command)
 
     def format_initial_prompt(self, user_command: str) -> list[dict[str, str]]:
         """Format the initial prompt for the LLM.
@@ -137,7 +144,7 @@ class Choreographer:
         msgs.append({"role": "system", "content": self.prompts["example"]})
         msgs.append({"role": "system", "content": self.prompts["output_format"]})
 
-        msgs.append({"role": "assistant", "content": "THINKING:\n- Intent:"})
+        # msgs.append({"role": "assistant", "content": "THINKING:\n- Intent:"})
 
         return msgs
 

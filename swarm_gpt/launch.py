@@ -48,8 +48,12 @@ def main(
     music_dir = Path(__file__).resolve().parents[1] / "music"
     
     # submodules/crazyswarm/ros_ws/src/crazyswarm/launch/crazyflies.yaml
-    crazyswarm_path = get_ros_package_path("crazyswarm", heuristic_search=True)
-    config_file = crazyswarm_path / "launch/crazyflies.yaml"
+    try:
+        crazyswarm_path = get_ros_package_path("crazyswarm", heuristic_search=True)
+        config_file = crazyswarm_path / "launch/crazyflies.yaml"
+    except Exception:
+        logging.warning("crazyswarm not found. Using default simulation config.")
+        config_file = Path(__file__).resolve().parent / "data/sim_crazyflies.yaml"
 
     # Model IDs: "gpt-4o-2024-05-13", "gpt-3.5-turbo-0125", "gpt-4o-2024-05-13"
     backend = AppBackend(
