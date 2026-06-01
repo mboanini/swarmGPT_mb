@@ -1,59 +1,261 @@
+# move:
+#   description: "Moves drones to ABSOLUTE position"
+#   n_args: 4
+
+# move_z:
+#   description: "Moves drones up/down by distance"
+#   n_args: 2
+
+# rotate:
+#   description: "Rotates the ENTIRE formation by angle around an axis"
+#   n_args: 2
+
+# form_circle:
+#   description: "Arranges drones in a circle at a given height"
+#   n_args: 2
+
+# center:
+#   description: "Groups drones into a tight circle centered at the swarm's current centroid"
+#   n_args: 1 
+
+# swap:
+#   description: "Swaps positions of two drones"
+#   n_args: 2
+
+# form_star:
+#   description: "Arranges drones in a star/flower pattern at a given height"
+#   n_args: 3
+
+# form_cone:
+#   description: "Arranges drones in a cone shape"
+#   n_args: 3
+
+# polygon:
+#   description: "Arranges all drones in a regular polygon with a given nr of sides at a given height, such as triangle, square, pentagon, hexagon"
+#   n_args: 2
+
+# spiral:
+#   description: "Moves all drones in a outward spiral pattern"
+#   n_args: 2
+
+# spiral_speed:
+#   description: "Moves all drones in a outward spiral pattern with speed control"
+#   n_args: 4
+
+# helix:
+#   description: "Drones rise while orbiting in a helix pattern"
+#   n_args: 3
+
+# twister:
+#   description: "Spinning cone that rotates while moving vertically"
+#   n_args: 3
+
+# zig_zag:
+#   description: "Moves drones in a zigzag pattern"
+#   n_args: 3
+
+# wave:
+#   description: "Arranges drones in a complex wave pattern"
+#   n_args: 5
+
 move:
   description: "Moves drones to ABSOLUTE position"
   n_args: 4
+  utterances:
+    - "move drones to position"
+    - "go to coordinates"
+    - "fly to location"
+    - "move to absolute position"
+    - "send drones to point"
+    - "navigate to position"
+    - "relocate swarm"
+    - "move swarm to"
 
 move_z:
   description: "Moves drones up/down by distance"
   n_args: 2
+  utterances:
+    - "move up"
+    - "move down"
+    - "go higher"
+    - "descend"
+    - "ascend"
+    - "change altitude"
+    - "fly up"
+    - "fly down"
+    - "increase height"
+    - "decrease height"
 
 rotate:
   description: "Rotates the ENTIRE formation by angle around an axis"
   n_args: 2
+  utterances:
+    - "rotate the formation"
+    - "spin the swarm"
+    - "turn the formation"
+    - "rotate by angle"
+    - "spin around axis"
+    - "turn clockwise"
+    - "turn counterclockwise"
+    - "rotate formation by degrees"
+    - "spin formation"
 
 form_circle:
   description: "Arranges drones in a circle at a given height"
   n_args: 2
+  utterances:
+    - "make a circle"
+    - "form a circle"
+    - "circular formation"
+    - "arrange in a circle"
+    - "draw a circle"
+    - "drones in a ring"
+    - "circular pattern"
+    - "round formation"
+    - "form a ring"
 
 center:
-  description: "Groups drones into a tight circle centered at the swarm's current centroid"
-  n_args: 1 
+  description: "Groups drones into a tight circle centered at the swarm centroid"
+  n_args: 1
+  utterances:
+    - "center the swarm"
+    - "group together"
+    - "gather drones"
+    - "bring drones together"
+    - "cluster the swarm"
+    - "regroup"
+    - "consolidate drones"
+    - "tighten formation"
+    - "centralize"
 
 swap:
   description: "Swaps positions of two drones"
   n_args: 2
+  utterances:
+    - "swap two drones"
+    - "exchange positions"
+    - "switch two drones"
+    - "swap drone positions"
+    - "exchange drones"
+    - "switch positions of drones"
+    - "swap places"
 
 form_star:
   description: "Arranges drones in a star/flower pattern at a given height"
   n_args: 3
+  utterances:
+    - "make a star"
+    - "form a star pattern"
+    - "star formation"
+    - "flower pattern"
+    - "arrange in a star"
+    - "star shape"
+    - "form a flower"
+    - "star shaped formation"
 
 form_cone:
   description: "Arranges drones in a cone shape"
   n_args: 3
+  utterances:
+    - "form a cone"
+    - "cone formation"
+    - "arrange in a cone"
+    - "conical shape"
+    - "pyramid formation"
+    - "cone shaped"
+    - "make a cone"
+    - "3d cone pattern"
 
 polygon:
-  description: "Arranges all drones in a regular polygon with a given nr of sides at a given height, such as triangle, square, pentagon, hexagon"
+  description: "Arranges drones in a regular polygon such as triangle, square, pentagon, hexagon"
   n_args: 2
+  utterances:
+    - "form a polygon"
+    - "make a triangle"
+    - "square formation"
+    - "pentagon shape"
+    - "hexagon pattern"
+    - "regular polygon"
+    - "form a triangle"
+    - "make a square"
+    - "arrange in a polygon"
+    - "geometric shape"
+    - "form a hexagon"
+    - "make a pentagon"
 
 spiral:
-  description: "Moves all drones in a outward spiral pattern"
+  description: "Moves all drones in an outward spiral pattern"
   n_args: 2
+  utterances:
+    - "spiral outward"
+    - "move in a spiral"
+    - "outward spiral"
+    - "spiral pattern"
+    - "expand in spiral"
+    - "spiral motion"
+    - "make a spiral"
+    - "fly in spiral"
 
 spiral_speed:
-  description: "Moves all drones in a outward spiral pattern with speed control"
+  description: "Moves all drones in an outward spiral pattern with speed control"
   n_args: 4
+  utterances:
+    - "spiral with speed"
+    - "controlled spiral"
+    - "spiral at speed"
+    - "fast spiral"
+    - "slow spiral"
+    - "spiral with velocity control"
+    - "speed controlled spiral"
 
 helix:
   description: "Drones rise while orbiting in a helix pattern"
   n_args: 3
+  utterances:
+    - "helix pattern"
+    - "rising spiral"
+    - "fly in a helix"
+    - "ascending spiral"
+    - "helical motion"
+    - "orbit while rising"
+    - "make a helix"
+    - "corkscrew pattern"
 
 twister:
   description: "Spinning cone that rotates while moving vertically"
   n_args: 3
+  utterances:
+    - "twister formation"
+    - "spinning cone"
+    - "tornado pattern"
+    - "rotating cone"
+    - "vortex motion"
+    - "spin while moving vertically"
+    - "twisting cone"
+    - "make a twister"
 
 zig_zag:
   description: "Moves drones in a zigzag pattern"
   n_args: 3
+  utterances:
+    - "zigzag pattern"
+    - "move in zigzag"
+    - "zig zag motion"
+    - "back and forth"
+    - "serpentine movement"
+    - "zigzag flight"
+    - "make a zigzag"
+    - "fly in zigzag"
 
 wave:
   description: "Arranges drones in a complex wave pattern"
   n_args: 5
+  utterances:
+    - "wave pattern"
+    - "make a wave"
+    - "wave formation"
+    - "sinusoidal pattern"
+    - "undulating formation"
+    - "wave motion"
+    - "arrange in a wave"
+    - "wave shape"

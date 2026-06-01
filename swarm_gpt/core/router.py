@@ -59,10 +59,6 @@ class Router:
         }
         logger.info("Semantic router ready with %d primitives", len(self.primitives))
 
-    # ------------------------------------------------------------------
-    # PUBLIC API
-    # ------------------------------------------------------------------
-
     def route(self, command: str) -> dict:
         """
         Route a (possibly compound) command.
@@ -96,9 +92,7 @@ class Router:
         logger.info("Routing result: %s", result)
         return result
 
-    # ------------------------------------------------------------------
-    # STEP 1 — CHUNKING (one LLM call, gpt-4o-mini)
-    # ------------------------------------------------------------------
+    # STEP 1 — CHUNKING
 
     def _chunk_command(self, command: str) -> list[str]:
         """Split a compound command into atomic sub-commands."""
@@ -117,9 +111,7 @@ class Router:
         data = json.loads(response.choices[0].message.content)
         return data.get("chunks", [command])
 
-    # ------------------------------------------------------------------
-    # STEP 2 — SEMANTIC CHECK (deterministic, no LLM)
-    # ------------------------------------------------------------------
+    # STEP 2 — SEMANTIC CHECK
 
     def _is_covered(self, chunk: str) -> bool:
         """
