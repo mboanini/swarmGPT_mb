@@ -29,6 +29,7 @@ libgl-devel = "*"
 ruff = ">=0.13.0,<0.14"
 crazyflow = ">=0.0.2"
 pytest = "*"
+semantic-router = "*"
 
 [environments]
 docs = { features = ["docs"] }

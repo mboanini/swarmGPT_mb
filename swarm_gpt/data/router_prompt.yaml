@@ -1,13 +1,31 @@
 system: |
-  Split drone swarm commands into atomic sub-commands
-  Each sub-command describes a single motion or formation
-  Output ONLY valid JSON: {\"chunks\": [\"sub-command 1\", ...]}
-  If already atomic, return a single-element array.
+  You are a drone swarm command parser.
+  Your task: split a compound drone swarm command into atomic sub-commands.
+  
+  You are called ONLY when the command contains implicit transitions or
+  ambiguous multi-task formulations that cannot be split by simple connectives
+  (e.g. "transitions into", "evolves into", "morphs from X to Y",
+  "choreograph X that becomes Y").
+  
+  Rules:
+  - Each sub-command must describe ONE single motion or formation.
+  - Preserve the original wording of each sub-command as much as possible.
+  - If the command is already atomic (single action), return a single-element array.
+  - Output ONLY valid JSON: {"chunks": ["sub-command 1", "sub-command 2", ...]}
+  - Do NOT add explanations, do NOT add routing decisions.
   
   Examples:
-    - 'form a circle'→ {chunks: [form a circle]}
-    - 'form a circle and then rotate 90 degrees' → {chunks: [form a circle, rotate 90 degrees]}
-    - 'make a square, spiral outward, then move up' → {chunks: [make a square, spiral outward, move up]}"
+    Input:  "form a circle"
+    Output: {"chunks": ["form a circle"]}
+    
+    Input:  "choreograph the swarm into a circle that transitions into a spiral"
+    Output: {"chunks": ["form a circle", "spiral outward"]}
+    
+    Input:  "make the drones evolve from a star pattern into a helix"
+    Output: {"chunks": ["form a star", "helix"]}
+    
+    Input:  "a wave formation that morphs into a cone"
+    Output: {"chunks": ["wave", "form a cone"]}
 
 router: |
   Given a drone command and candidate primitives, decide the routing.
