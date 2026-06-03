@@ -5,37 +5,37 @@
 # The id field maps to the last byte of the radio URI (0x0B = 11, etc.).
 
 /crazyflie_server:
-  ros__parameters:
+  # ros__parameters:
 
-    # ── Motion capture ────────────────────────────────────────────────────────
-    motion_capture_type: "vicon"          # vicon | optitrack | qualisys | vrpn | none
-    object_tracking_type: "motionCapture" # motionCapture | libobjecttracker
-    motion_capture_host_name: "localhost"
-    send_position_only: false
+  #   # ── Motion capture ────────────────────────────────────────────────────────
+  #   motion_capture_type: "vicon"          # vicon | optitrack | qualisys | vrpn | none
+  #   object_tracking_type: "motionCapture" # motionCapture | libobjecttracker
+  #   motion_capture_host_name: "localhost"
+  #   send_position_only: false
 
-    # ── Logging ───────────────────────────────────────────────────────────────
-    enable_logging: false
-    enable_logging_pose: true
-    enable_parameters: true
-    genericLogTopics: ["log1"]
-    genericLogTopicFrequencies: [10]
-    genericLogTopic_log1_Variables: ["stateEstimate.x", "ctrltarget.x"]
+  #   # ── Logging ───────────────────────────────────────────────────────────────
+  #   enable_logging: false
+  #   enable_logging_pose: true
+  #   enable_parameters: true
+  #   genericLogTopics: ["log1"]
+  #   genericLogTopicFrequencies: [10]
+  #   genericLogTopic_log1_Variables: ["stateEstimate.x", "ctrltarget.x"]
 
     # ── Robot instances ───────────────────────────────────────────────────────
     # named list of all robots
     fileversion: 3
 
     robots:
-      cf231:
-        enabled: false
-        uri: radio://0/80/2M/E7E7E7E7E7
-        initial_position: [0.0, 0.0, 0.0]
-        type: cf21  # see robot_types
+      cf6:
+        enabled: true
+        uri: radio://0/80/2M/E7E7E7E706
+        initial_position: [0.0, 0.5, 0.0]
+        type: cf22  # see robot_types
         # firmware_params:
         #   kalman:
         #     pNAcc_xy: 1.0 # default 0.5
-        # firmware_logging:
-        #   enabled: true
+        firmware_logging:
+          enabled: true
         #   custom_topics:
         #     topic_name3: 
         #       frequency: 1
@@ -46,11 +46,12 @@
         enabled: true
         uri: radio://0/80/2M/E7E7E7E708
         initial_position: [0.0, -0.5, 0.0]
-        type: cf21  # see robot_types
+        type: cf22  # see robot_types
         # firmware_params:
         #   kalman:
         #     pNAcc_xy: 1.0 # default 0.5
-        #firmware_logging:
+        firmware_logging:
+          enabled: true
         #  custom_topics:
         #    topic_name3: 
         #      frequency: 1
@@ -82,7 +83,29 @@
         #      frequency: 1
         #      vars: ["acc.x", "acc.y", "acc.z"]
         # reference_frame: "odom" 
-
+      cf22:
+        motion_capture:
+          tracking: "vendor" # one of "vendor", "librigidbodytracker"
+          # only if enabled; see motion_capture.yaml
+          # marker: default_single_marker
+          # dynamics: default
+        big_quad: false
+        battery:
+          voltage_warning: 3.8  # V
+          voltage_critical: 3.7 # V
+        # firmware_params:
+        #   kalman:
+        #     pNAcc_xy: 1.0 # default 0.5
+        firmware_logging:
+          enabled: true
+        #   default_topics:
+        #   pose:
+        #     frequency: 1 # Hz
+        #   custom_topics:
+        #    topic_name3: 
+        #      frequency: 1
+        #      vars: ["acc.x", "acc.y", "acc.z"]
+        # reference_frame: "odom" 
       cf21_mocap_deck:
         motion_capture:
           tracking: "librigidbodytracker" # one of "vendor", "librigidbodytracker"

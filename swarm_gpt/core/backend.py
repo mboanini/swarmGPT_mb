@@ -176,7 +176,7 @@ class AppBackend:
 
         self.waypoints = None
         self.splines: dict = {}
-        self.drone_controller = DroneController(20)
+        self.drone_controller = DroneController(10)
         self.choreographer = Choreographer(
             config_file=config_file,
             model_id=model_id,
@@ -313,7 +313,24 @@ class AppBackend:
             self.splines[drone] = [
                 make_smoothing_spline(t, controls[:, j], lam=lam) for j in range(3)
             ]
+        #--------------------------------------------------------------
+        #-------------------------------------------------------------
+        # this is for checking the self.splines
+        for drone_id, splines in self.splines.items():
+            print(f"\nDrone {drone_id}")
+            for axis, spline in zip(["x", "y", "z"], splines):
+                print(f"  {axis}-spline:")
+                print(f"    degree: {spline.k}")
+                print(f"    knots: {spline.t}")
+                print(f"    coefficients: {spline.c}")
 
+                sample_times = np.linspace(0, t[-1], 10)
+                sample_values = spline(sample_times)
+                print(f"    sampled values:")
+                for sample_t, value in zip(sample_times, sample_values):
+                    print(f"      t={sample_t:.2f}: {value:.4f}")
+        # -------------------------------------------------------------------
+        #--------------------------------------------------------------------
         if gui:
             self._start_viz(self.splines, float(t[-1]))
 
@@ -343,15 +360,25 @@ class AppBackend:
         #     drone.setLEDColor(*colors[i % len(colors)])
 
         # original_song = self.music_manager.song
-        duration = next(iter(self.waypoints.values()))[-1, 0]
+        print(self.waypoints)
+        
+        # duration = next(iter(self.waypoints.values()))[-1, 0]
+        duration = float(np.max(self.waypoints["time"][:, -1]))
         # try:
         #     self.music_manager.song = original_song + "[deploy]"
         # except AssertionError:
         #     pass
+        self.drone_controller.arm(True)
         self.drone_controller.takeoff(target_height=1.0, duration=3.0)
+        self.drone_controller.move_to_initial_positions(height=1.0, duration=3.0)
         #self.music_manager.play()
-        self.drone_controller.run_spline_trajectories(self.splines, duration=duration)
-        self.drone_controller.land()
+        # self.drone_controller.run_spline_trajectories(self.splines, duration=duration)
+        try:
+            self.drone_controller.run_spline_trajectories(self.splines, duration=duration)
+        finally:
+            self.drone_controller.land_full_state(landing_height=0.05, duration=6.0)
+        
+        # self.drone_controller.land()
         # self.music_manager.song = original_song
         logger.info("Deployment successful")
 
