@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -103,6 +104,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--align-initial", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--land", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--sync-start", action=argparse.BooleanOptionalAction, default=True)
+    parser.add_argument("--upload-only", action="store_true")
     return parser.parse_args()
 
 
@@ -133,19 +135,8 @@ def main() -> None:
     }
     controller.swarm.allcfs.crazyfliesById = selected_drones
 
-    if args.arm:
-        print(f"Arming drones {drone_ids}")
-        controller.arm(True)
-
-    if args.takeoff:
-        print(f"Taking off to {args.takeoff_height:.2f} m")
-        controller.takeoff(target_height=args.takeoff_height, duration=args.takeoff_duration)
-
-    if args.align_initial:
-        print("Moving drones to configured initial x/y positions")
-        controller.move_to_initial_positions(height=args.takeoff_height, duration=args.align_duration)
-
-    print("Uploading high-level trajectories")
+    print("Uploading high-level trajectories before takeoff")
+    upload_start = time.perf_counter()
     for drone_index, (drone_id, crazyflie) in enumerate(selected_drones.items()):
         initial_position = np.array(crazyflie.initialPosition, dtype=float)
         initial_position[2] = args.takeoff_height
@@ -156,8 +147,33 @@ def main() -> None:
             pattern=args.pattern,
         )
         trajectory = make_relative_trajectory(duration=args.duration, offset=offset)
+        drone_upload_start = time.perf_counter()
         crazyflie.uploadTrajectory(TRAJECTORY_ID, 0, trajectory)
-        print(f"cf{drone_id}: start={initial_position}, end={initial_position + offset}, offset={offset}")
+        print(
+            f"cf{drone_id}: start={initial_position}, end={initial_position + offset}, "
+            f"offset={offset}, upload={time.perf_counter() - drone_upload_start:.3f}s"
+        )
+    print(f"Total upload took {time.perf_counter() - upload_start:.3f}s")
+    if args.upload_only:
+        print("Upload-only mode complete")
+        return
+
+    if args.arm:
+        print(f"Arming drones {drone_ids}")
+        controller.arm(True)
+
+    if args.takeoff:
+        print(f"Taking off to {args.takeoff_height:.2f} m")
+        controller.takeoff(target_height=args.takeoff_height, duration=args.takeoff_duration)
+
+    if args.align_initial:
+        print("Moving drones to configured initial x/y positions")
+        for drone_id, crazyflie in selected_drones.items():
+            goal = np.array(crazyflie.initialPosition, dtype=float)
+            goal[2] = args.takeoff_height
+            print(f"cf{drone_id}: goTo initial goal={goal}, duration={args.align_duration:.2f}s")
+            crazyflie.goTo(goal, yaw=0.0, duration=args.align_duration)
+        controller.swarm.timeHelper.sleep(args.align_duration + 0.5)
 
     if args.sync_start:
         print("Starting trajectories with group mask")
@@ -183,7 +199,7 @@ def main() -> None:
     if args.land:
         print(f"Landing selected drones over {args.land_duration:.2f} s")
         for crazyflie in selected_drones.values():
-            crazyflie.land(targetHeight=0.06, duration=args.land_duration)
+            crazyflie.land(targetHeight=0.01, duration=args.land_duration)
         controller.swarm.timeHelper.sleep(args.land_duration + 1.0)
         for crazyflie in selected_drones.values():
             crazyflie.arm(False)

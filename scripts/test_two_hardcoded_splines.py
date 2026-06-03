@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Run a synchronized hard-coded spline test for two Crazyflies."""
+"""
+Run a synchronized hard-coded spline test for two Crazyflies.
+python scripts/test_two_hardcoded_splines.py --pattern parallel-x --distance 0.5
+"""
 
 from __future__ import annotations
 

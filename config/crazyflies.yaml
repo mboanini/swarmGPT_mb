@@ -5,7 +5,7 @@
 # The id field maps to the last byte of the radio URI (0x0B = 11, etc.).
 
 /crazyflie_server:
-  # ros__parameters:
+  ros__parameters:
 
   #   # ── Motion capture ────────────────────────────────────────────────────────
   #   motion_capture_type: "vicon"          # vicon | optitrack | qualisys | vrpn | none
