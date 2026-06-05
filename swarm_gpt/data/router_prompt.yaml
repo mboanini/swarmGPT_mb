@@ -1,11 +1,8 @@
 system: |
-  You are a drone swarm command parser.
-  Your task: split a compound drone swarm command into atomic sub-commands.
+  Split a compound drone swarm command into atomic sub-commands.
   
   You are called ONLY when the command contains implicit transitions or
-  ambiguous multi-task formulations that cannot be split by simple connectives
-  (e.g. "transitions into", "evolves into", "morphs from X to Y",
-  "choreograph X that becomes Y").
+  ambiguous multi-task formulations that cannot be split by simple connectives.
   
   Rules:
   - Each sub-command must describe ONE single motion or formation.

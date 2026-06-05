@@ -35,25 +35,35 @@ logger = logging.getLogger(__name__)
 # MATCH_THRESHOLD = 0.2 # 0.55  # tune this based on your commands
 
 # Regex patterns for compound command detection
-_SEQUENCE_CONNECTIVES = re.compile(
-    r'\b('
-    r'and\s+then|then|after\s+that|followed\s+by|'
-    r'afterwards|subsequently|next|finally|lastly|'
-    r'first.*then|before\s+that'
-    r')\b',
-    re.IGNORECASE
-)
+# _SEQUENCE_CONNECTIVES = re.compile(
+#     r'\b('
+#     r'and\s+then|then|after\s+that|followed\s+by|'
+#     r'afterwards|subsequently|finally|lastly|firstly|'
+#     r'secondly|thirdly|before\s+that'
+#     r')\b',
+#     re.IGNORECASE
+# )
 
-_LIST_SEPARATORS = re.compile(
-    r',\s*(?:and\s+)?(?:then\s+)?(?=[a-z])',
-    re.IGNORECASE
-)
+# _LIST_SEPARATORS = re.compile(
+#     r',\s*(?:and\s+)?(?:then\s+)?(?=[a-z])',
+#     re.IGNORECASE
+# )
+
+# _SPLIT_PATTERN = re.compile(
+#     r'\s*(?:'
+#     r'and\s+then|then|after\s+that|followed\s+by|'
+#     r'afterwards|subsequently|'
+#     r',\s*(?:and\s+)?'
+#     r')\s*',
+#     re.IGNORECASE
+# )
 
 _SPLIT_PATTERN = re.compile(
     r'\s*(?:'
     r'and\s+then|then|after\s+that|followed\s+by|'
-    r'afterwards|subsequently|'
-    r',\s*(?:and\s+)?'
+    r'afterwards|subsequently|finally|lastly|firstly|'
+    r'secondly|thirdly|before\s+that|'
+    r',\s*(?:and\s+)?(?:then\s+)?'
     r')\s*',
     re.IGNORECASE
 )
@@ -103,7 +113,7 @@ class Router:
 
     def route(self, command: str) -> dict:
         """
-        Route a (possibly compound) command.
+        Route a command.
 
         Returns:
             {
@@ -151,41 +161,78 @@ class Router:
 
     # STEP 1 — CHUNKING
 
-    def _is_compound(self, command:str) -> bool:
+    # def _is_compound(self, command:str) -> bool:
+    #     """
+    #     Detects multi-task commands via explicit sequence connectives.
+    #     """
+    #     if _SEQUENCE_CONNECTIVES.search(command):
+    #         return True
+    #     if len(_LIST_SEPARATORS.findall(command)) >= 1:
+    #         return True
+    #     return False
+
+    def _is_compound(self, command: str) -> bool:
         """
         Detects multi-task commands via explicit sequence connectives.
+        Deterministic, ~0ms, 0 LLM calls.
+        Uses the same pattern as _chunk_command to avoid discrepancies.
         """
-        if _SEQUENCE_CONNECTIVES.search(command):
-            return True
-        if len(_LIST_SEPARATORS.findall(command)) >= 1:
-            return True
-        return False
+        parts = _SPLIT_PATTERN.split(command)
+        parts = [p.strip() for p in parts if p.strip()]
+        return len(parts) > 1
 
+    # def _chunk_command(self, command: str) -> list[str]:
+    #     """
+    #     Hybrid split strategy:
+    #     - Explicit connectives detected -> regex split (no LLM call)
+    #     - No explicit connectives -> LLM chunker
+    #       e.g. "transitions into", "envolves into", "morphs from X to Y"
+
+    #     The LLM chunker always returns at least one chunk:
+    #     - single-intent query -> [command] (no decomposition)
+    #     - multi-task query -> [chunk1, chunk2, ...]
+    #     """
+    #     if self._is_compound(command):
+    #         chunks = _SPLIT_PATTERN.split(command)
+    #         chunks = [c.strip() for c in chunks if c.strip()]
+    #         logger.info("Deterministic split -> %s", chunks)
+    #         return chunks
+
+    #     response = self.client.chat.completions.create(
+    #         model="gpt-4o-mini",
+    #         messages=[
+    #             {
+    #                 "role": "system",
+    #                 "content": self.prompt_router["system"],
+    #             },
+    #             {"role": "user", "content": command},
+    #         ],
+    #         response_format={"type": "json_object"},
+    #         temperature=0,
+    #     )
+    #     data = json.loads(response.choices[0].message.content)
+    #     chunks = data.get("chunks", [command])
+    #     logger.info("LLM chunker split → %s", chunks)
+    #     return data.get("chunks", [command])
 
     def _chunk_command(self, command: str) -> list[str]:
         """
         Hybrid split strategy:
-        - Explicit connectives detected -> regex split (no LLM call)
-        - No explicit connectives -> LLM chunker
-          e.g. "transitions into", "envolves into", "morphs from X to Y"
-
-        The LLM chunker always returns at least one chunk:
-        - single-intent query -> [command] (no decomposition)
-        - multi-task query -> [chunk1, chunk2, ...]
+        - Explicit connectives detected → regex split (0 LLM calls)
+        - No explicit connectives → LLM chunker for implicit formulations
+        e.g. "transitions into", "evolves into", "morphs from X to Y"
         """
         if self._is_compound(command):
             chunks = _SPLIT_PATTERN.split(command)
             chunks = [c.strip() for c in chunks if c.strip()]
-            logger.info("Deterministic split -> %s", chunks)
+            logger.info("Deterministic split → %s", chunks)
             return chunks
 
+        # Fallback — LLM for implicit multi-task formulations
         response = self.client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {
-                    "role": "system",
-                    "content": self.prompt_router["system"],
-                },
+                {"role": "system", "content": self.prompt_router["system"]},
                 {"role": "user", "content": command},
             ],
             response_format={"type": "json_object"},
@@ -194,7 +241,7 @@ class Router:
         data = json.loads(response.choices[0].message.content)
         chunks = data.get("chunks", [command])
         logger.info("LLM chunker split → %s", chunks)
-        return data.get("chunks", [command])
+        return chunks
 
     # STEP 2 — SEMANTIC CHECK
 
