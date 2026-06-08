@@ -174,8 +174,6 @@ class Router:
     def _is_compound(self, command: str) -> bool:
         """
         Detects multi-task commands via explicit sequence connectives.
-        Deterministic, ~0ms, 0 LLM calls.
-        Uses the same pattern as _chunk_command to avoid discrepancies.
         """
         parts = _SPLIT_PATTERN.split(command)
         parts = [p.strip() for p in parts if p.strip()]
