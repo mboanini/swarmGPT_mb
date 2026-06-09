@@ -19,7 +19,7 @@ from openai import OpenAI
 from swarm_gpt.core.motion_primitives import motion_primitives as motion_primitives_collection
 from swarm_gpt.core.motion_primitives import primitive_by_name
 from swarm_gpt.exception import LLMFormatError, LLMPlanError, LLMResponseProcessingError, LLMException
-from swarm_gpt.core.agent2 import Agent2
+# from swarm_gpt.core.agent2 import Agent2
 from swarm_gpt.core.router import Router
 
 if TYPE_CHECKING:
@@ -60,10 +60,10 @@ class Choreographer:
         self.starting_pos = {}
         self.num_drones = 0
         self.messages = []
-        self.agent2 = Agent2(
-            call_llm_fn=self._call_openai,
-            prompts_path=Path(__file__).resolve().parents[1] / "data/prompt_agent2.yaml"
-        )
+        # self.agent2 = Agent2(
+        #     call_llm_fn=self._call_openai,
+        #     prompts_path=Path(__file__).resolve().parents[1] / "data/prompt_agent2.yaml"
+        # )
         self.router = Router(
             primitives_path=Path(__file__).resolve().parents[1] / "data/primitives.yaml",
             openai_client=client
@@ -73,9 +73,9 @@ class Choreographer:
         prompt = "prompts_prim" if self.use_motion_primitives else "prompts_no_music"
         with open(Path(__file__).resolve().parents[1] / f"data/{prompt}.yaml", "r") as f:
             self.prompts = yaml.safe_load(f)
-        prompt_agent_one = "prompt_agent1"
-        with open(Path(__file__).resolve().parents[1] / f"data/{prompt_agent_one}.yaml", "r") as f:
-            self.prompts_a1 = yaml.safe_load(f)
+        # prompt_agent_one = "prompt_agent1"
+        # with open(Path(__file__).resolve().parents[1] / f"data/{prompt_agent_one}.yaml", "r") as f:
+        #     self.prompts_a1 = yaml.safe_load(f)
         self.load_drone_config(config_file)
         # Limits define boundaries of permissible flying area
         self.lim_lower = np.array(self.settings["axswarm"]["pos_min"])
