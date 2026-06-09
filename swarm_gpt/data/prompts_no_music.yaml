@@ -101,6 +101,56 @@ system_initial: |
     - Complex wave pattern. Use default values for mu_pairs, a_mu, b_mu unless specified.
     - Example: wave(8, 150, [[0.4, 0.4]], [[0,0,0.25]], [[0,0,0.25]])
 
+  ### SWARM BEHAVIOURS — single-step
+  bridge(x1, y1, x2, y2, z)
+    - Arranges ALL drones in a straight chain between point (x1, y1) and (x2, y2) at height z.
+    - Drones are spaced evenly along the segment; assignment is collision-free.
+    - Example: bridge(-150, 0, 150, 0, 100) → left-to-right chain at 100cm.
+
+  encircle(target_x, target_y, target_z, radius)
+    - Forms a ring of ALL drones around (target_x, target_y) at height target_z.
+    - {radius}: cm from the target to each drone. Auto-clipped to keep drones in bounds.
+    - Example: encircle(0, 0, 120, 90) → ring around center at 120cm with 90cm radius.
+
+  aggregate(target_x, target_y, z)
+    - Gathers ALL drones in a tight cluster around the XY target point at height z.
+    - Example: aggregate(80, 50, 100) → all drones near (80, 50) at 100cm.
+
+  cover(z)
+    - Distributes ALL drones in a uniform grid across the full XY environment at height z.
+    - Example: cover(80) → uniform coverage at 80cm.
+
+  cluster(n_clusters, z)
+    - Divides drones into {n_clusters} evenly spread groups at height z.
+    - n_clusters must be ≥ 2 and ≤ num_drones.
+    - Example: cluster(3, 100) → 3 groups at 100cm.
+
+  ### SWARM BEHAVIOURS — multi-step (MUST be followed by steps-1 PLAN entries)
+  flock(steps, separation_dist, speed)
+    - Boids flocking: cohesion toward swarm centroid + separation from nearby drones.
+    - {separation_dist}: target minimum inter-drone distance (cm). Range [60, 150].
+    - {speed}: max speed per step (cm/s). Range [20, 80].
+    - Example: flock(6, 80, 50)
+
+  explore(steps, z)
+    - Drones repel each other and the arena walls to maximise coverage at height z.
+    - Example: explore(8, 100)
+
+  pursue(target_x, target_y, target_z, steps)
+    - Moves the entire formation toward (target_x, target_y, target_z) preserving relative positions.
+    - Example: pursue(150, 100, 120, 5)
+
+  crossing(steps, z)
+    - Two groups of drones swap sides by reflecting their X position around the swarm centroid.
+    - Collision-free assignment ensures no two drones share the same target.
+    - Example: crossing(6, 100)
+
+  shaping(target_points, z)
+    - Moves drones to an arbitrary set of explicit XY target points at height z.
+    - {target_points}: list of [x, y] pairs, one per drone (cm).
+    - Hungarian assignment ensures collision-free allocation.
+    - Example: shaping([[-100, 0], [0, 0], [100, 0]], 100)
+
   ## DECISION LOGIC
   1. Read the command carefully.
   2. Ask: does ANY primitive produce EXACTLY this shape/movement?
@@ -110,6 +160,16 @@ system_initial: |
      - spiral/helix/twister/zig_zag/wave → only for those exact dynamic patterns
      - A pentagon, triangle, square, hexagon, or any regular polygon → use polygon(n_sides, height).
        The function automatically handles any mismatch between drone count and vertex count. NEVER compute polygon vertices manually.
+     - bridge    → chain of drones between two explicit XY points
+     - encircle  → ring around a specific target point (NOT the same as form_circle, which centers on the swarm)
+     - aggregate → gather all drones at a specific XY target
+     - cover     → uniform grid coverage of the full environment
+     - cluster   → split drones into N distinct groups
+     - flock     → boids-style flocking behaviour over multiple steps
+     - explore   → maximum-spread repulsion behaviour over multiple steps
+     - pursue    → translate the whole formation toward a target over multiple steps
+     - crossing  → two groups swap sides by reflecting X positions over multiple steps
+     - shaping   → move drones to explicit arbitrary [x,y] target points
   3. If YES (exact match) → use the primitive. Do NOT recompute what it already handles.
   4. If NO → compute goal positions manually:
      a. Calculate centroid of current swarm positions.
@@ -137,11 +197,12 @@ system_initial: |
   - 1 timestep = 0.5 seconds.
   - PLAN is a keyword (not a function) meaning "hold current position for this timestep".
   - After any INSTANTANEOUS primitive (form_circle, form_star, form_cone, center, swap,
-    move, move_z, rotate, polygon), you MUST add at least 4 PLAN lines to give drones time to
-    reach and stabilize their target position (= 2 seconds minimum).
-  - After any MULTI-STEP primitive (spiral, spiral_speed, helix, twister, zig_zag, wave),
-    add (steps - 1) PLAN lines as required by the function, PLUS 2 extra PLAN lines
-    for stabilization before the next primitive.
+    move, move_z, rotate, polygon, bridge, encircle, aggregate, cover, cluster, shaping),
+    you MUST add at least 4 PLAN lines to give drones time to reach and stabilize their
+    target position (= 2 seconds minimum).
+  - After any MULTI-STEP primitive (spiral, spiral_speed, helix, twister, zig_zag, wave,
+    flock, explore, pursue, crossing), add (steps - 1) PLAN lines as required by the function,
+    PLUS 2 extra PLAN lines for stabilization before the next primitive.
   - If the user specifies a duration (e.g. "hold for 3 seconds"), add 6 PLAN lines (3s / 0.5s).
   - If no duration specified, use 4 PLAN lines as default after instantaneous primitives.
 
@@ -280,6 +341,49 @@ example: |
     3: PLAN
     4: PLAN
     5: PLAN
+    END
+
+  # Example 6: Swarm behaviour — single-step
+  Drones: 5 | Current: [[0,0,100],...] | Command: "Form a bridge from (-150,0) to (150,0) at 100cm"
+
+  THINKING:
+  - Intent: arrange all drones in a chain along a line segment
+  - Category: A — bridge() is an exact match
+  - Chosen approach: bridge(-150, 0, 150, 0, 100)
+  - Potential issues: none, all x-coords within [-200, 200]
+
+  reasoning:
+    intent: "Chain all drones between (-150,0) and (150,0) at 100cm"
+    mapping: "bridge() — evenly spaces drones along the segment, collision-free assignment"
+  choreography:
+    1: bridge(-150, 0, 150, 0, 100)
+    2: PLAN
+    3: PLAN
+    4: PLAN
+    5: PLAN
+    END
+
+  # Example 7: Swarm behaviour — multi-step
+  Drones: 4 | Current: [[0,0,100],...] | Command: "Make the drones explore the area for 6 steps at 100cm"
+
+  THINKING:
+  - Intent: spread drones to maximise coverage — dynamic multi-step behaviour
+  - Category: A — explore() is an exact match
+  - Chosen approach: explore(6, 100) — must be followed by 5 PLAN entries
+  - Potential issues: none
+
+  reasoning:
+    intent: "Maximise area coverage via mutual repulsion for 6 steps at 100cm"
+    mapping: "explore(6, 100) — multi-step, followed by 5 PLAN + 2 stabilisation PLAN"
+  choreography:
+    1: explore(6, 100)
+    2: PLAN
+    3: PLAN
+    4: PLAN
+    5: PLAN
+    6: PLAN
+    7: PLAN
+    8: PLAN
     END
 
 output_format: |

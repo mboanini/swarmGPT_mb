@@ -238,6 +238,22 @@ user_initial: >
   - wave(steps, height, mu_pairs, a_coeffs, b_coeffs): 3D wave propagation.
     Latex: {wave_eqn}
 
+  3: Swarm-behaviour functions (single-step):
+  - bridge(x1, y1, x2, y2, z): Chain of drones from point (x1,y1) to (x2,y2) at height z.
+  - encircle(target_x, target_y, target_z, radius): Ring of drones around a target point.
+  - aggregate(target_x, target_y, z): All drones clustered around an XY target at height z.
+  - cover(z): Uniform grid distribution across the full XY environment at height z.
+  - cluster(n_clusters, z): Drones split into n_clusters groups (n_clusters >= 2).
+  - shaping(target_points, z): Drones move to explicit [x,y] target points at height z.
+    target_points is a list of [x,y] pairs, one per drone.
+    Example: shaping([[-100,0],[0,0],[100,0]], 100)
+
+  4: Swarm-behaviour functions (multi-step, MUST be followed by steps-1 PLAN entries):
+  - flock(steps, separation_dist, speed): Boids flocking — cohesion + separation. separation_dist [60,150] cm, speed [20,80] cm/s. Steps [3,10].
+  - explore(steps, z): Mutual repulsion to maximise area coverage at height z. Steps [3,10].
+  - pursue(target_x, target_y, target_z, steps): Formation moves toward target. Steps [3,10].
+  - crossing(steps, z): Two groups swap sides by reflecting X around the swarm centroid. Steps [3,10].
+
   # Rules for PLAN:
   - Use 'PLAN' to hold a position or to allow a multi-step function to complete.
   - Transition Rule: Between two different primitives (e.g., after a circle and before a spiral), 
