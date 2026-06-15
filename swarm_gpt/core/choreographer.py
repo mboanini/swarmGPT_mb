@@ -14,8 +14,9 @@ import einops
 import numpy as np
 import ollama
 import yaml
-from openai import OpenAI
+# from openai import OpenAI  # moved to swarm_gpt/core/_llm_client.py
 
+from swarm_gpt.core._llm_client import client
 from swarm_gpt.core.motion_primitives import motion_primitives as motion_primitives_collection
 from swarm_gpt.core.motion_primitives import primitive_by_name
 from swarm_gpt.exception import LLMFormatError, LLMPlanError, LLMResponseProcessingError, LLMException
@@ -25,7 +26,7 @@ from swarm_gpt.core.router import Router
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # moved to swarm_gpt/core/_llm_client.py
 logger = logging.getLogger(__name__)
 
 

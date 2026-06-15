@@ -1,6 +1,6 @@
 import inspect
 
-from swarm_gpt.core.motion_primitives import bridge, form_circle, rotate
+from swarm_gpt.core.motion_primitives import bridge, form_circle, spiral, zig_zag
 
 # Description of helpers injected at runtime into every primitive's scope.
 # These are NOT imported by the generated function — they are already available.
@@ -24,5 +24,5 @@ def _form_grid(swarm_pos, limits, height=None, spacing=None):
 # Source code of three representative existing primitives, loaded at import time.
 # GenSwarm equivalent: other_functions_str built from skill_tree.filtered_functions().
 FEW_SHOT_EXAMPLES: str = "\n\n".join(
-    inspect.getsource(fn) for fn in [form_circle, rotate, bridge]
+    inspect.getsource(fn) for fn in [form_circle, spiral, zig_zag, bridge]
 )
