@@ -34,10 +34,16 @@ Do NOT implement the function body — write `pass` only.
 Every motion primitive has exactly this signature:
 ```python
 # n_args: N
-def {function_name}(params, swarm_pos, tstart, tend, limits):
+def {function_name}(
+    params: tuple,
+    swarm_pos: NDArray,
+    tstart: float,
+    tend: float,
+    limits: dict[str, NDArray],
+) -> tuple[NDArray, dict[float, dict[int, NDArray]]]:
 ```
 - `params`: tuple of N user-supplied values. You decide N, their types and semantics.
-- `swarm_pos`: NDArray (n_drones, 3) — current drone positions in cm.
+- `swarm_pos`: NDArray (n_drones, 3) — units: cm, axes: x=right, y=forward, z=up.
 - `tstart`, `tend`: float — time window in seconds. Waypoints must be in (tstart, tend].
 - `limits`: dict with keys 'lower' and 'upper', each NDArray[3] in metres.
 - Returns `(final_pos, waypoints)`:
@@ -82,7 +88,9 @@ def {function_name}(params, swarm_pos, tstart, tend, limits):
 ## Notes
 - The signature is fixed — never add or remove arguments.
 - `params` is the only design choice: keep N between 1 and 4.
-- The `# n_args: N` comment is mandatory — replace N with the actual count.
+- The `# n_args: N` comment is mandatory — replace N with the TOTAL number of elements in the
+  params tuple. If drone_ids is the first element, it counts: e.g. `(drone_ids, radius, height)`
+  → N=3, not N=2. N must equal exactly the number of comma-separated items in the params tuple.
 - Do NOT write the body — `pass` only.
 - Do NOT add imports — `np`, `_assign_positions`, `_form_grid` are already in scope.
 - The function name must be exactly `{function_name}`.
