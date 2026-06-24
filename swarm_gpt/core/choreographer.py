@@ -61,6 +61,7 @@ class Choreographer:
         self.starting_pos = {}
         self.num_drones = 0
         self.messages = []
+        self._custom_primitives: list[dict] = []
         # self.agent2 = Agent2(
         #     call_llm_fn=self._call_openai,
         #     prompts_path=Path(__file__).resolve().parents[1] / "data/prompt_agent2.yaml"
@@ -141,6 +142,8 @@ class Choreographer:
         msgs = []
         user_prompt = self._format_initial_user_prompt(user_command)
         msgs.append({"role": "system", "content": self.prompts["system_initial"]})
+        if self._custom_primitives:
+            msgs.append({"role": "system", "content": self._build_generated_primitives_system_msg()})
         msgs.append({"role": "user", "content": user_prompt})
         msgs.append({"role": "system", "content": self.prompts["example"]})
         msgs.append({"role": "system", "content": self.prompts["output_format"]})
@@ -169,6 +172,45 @@ class Choreographer:
             raise ValueError(f"Model ID {self._model_id} not recognized")
         self.messages.append({"role": "assistant", "content": response})
         return response
+
+    def add_generated_primitive(
+        self, name: str, description: str, definition: str, body: str, n_args: int
+    ) -> None:
+        """Register a newly generated primitive so the Choreographer knows to use it."""
+        self._custom_primitives.append({
+            "name": name,
+            "description": description,
+            "definition": definition,
+            "body": body,
+            "n_args": n_args,
+        })
+
+    def _choreographer_sig(self, p: dict) -> str:
+        """Return the choreographer-level call signature for a generated primitive."""
+        match = re.search(r"^\s*([\w]+(?:\s*,\s*[\w]+)*)\s*=\s*params", p["body"], re.MULTILINE)
+        if match:
+            names = [n.strip() for n in match.group(1).split(",")]
+            args = names[: p["n_args"]]
+        else:
+            args = [f"p{i + 1}" for i in range(p["n_args"])]
+        return f"{p['name']}({', '.join(args)})"
+
+    def _build_generated_primitives_system_msg(self) -> str:
+        lines = [
+            "## GENERATED PRIMITIVES — TREAT AS BUILT-IN",
+            "",
+            "The following primitives were generated in this session.",
+            "They are fully valid. You MUST use them when the command matches,",
+            "exactly like any primitive in ## AVAILABLE PRIMITIVES.",
+            "Do NOT compute manual waypoints when a generated primitive applies.",
+            "",
+        ]
+        for p in self._custom_primitives:
+            sig = self._choreographer_sig(p)
+            lines.append(f"- {sig}")
+            lines.append(f"  {p['description']}")
+            lines.append("")
+        return "\n".join(lines)
 
     def reset_history(self):
         """Reset the LLM history to ensure a clean slate."""
@@ -305,9 +347,9 @@ class Choreographer:
             waypoints = self._choreo2waypoints(choreo_steps, timestamps)
 
         # CASO 3: Ibrido (Il "Mix")
-        else:
-            logger.info("Executing Case 3: Hybrid Output Detected")
-            waypoints = self._handle_hybrid_choreography(choreo_steps, timestamps)
+        # else:
+        #     logger.info("Executing Case 3: Hybrid Output Detected")
+        #     waypoints = self._handle_hybrid_choreography(choreo_steps, timestamps)
 
         # Clip waypoint values to the physical limits
         waypoints["pos"] = np.clip(waypoints["pos"], self.lim_lower, self.lim_upper)

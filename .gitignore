@@ -25,6 +25,8 @@ vicon_bridge
 catkin_ws
 
 openai_api_key.sh
+swarm_gpt/core/motion_primitives_addition.py
+swarm_gpt/data/prompts_no_music_addition.yaml
 
 install/
 log/

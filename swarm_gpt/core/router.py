@@ -32,7 +32,7 @@ from semantic_router.encoders import OpenAIEncoder
 
 logger = logging.getLogger(__name__)
 
-# MATCH_THRESHOLD = 0.2 # 0.55  # tune this based on your commands
+# MATCH_THRESHOLD = 0.2 # 0.55 
 
 # Regex patterns for compound command detection
 # _SEQUENCE_CONNECTIVES = re.compile(
@@ -77,6 +77,7 @@ class Router:
             openai_client:   OpenAI client (creates one if not provided)
         """
         self.client = openai_client or OpenAI()
+        self._primitives_path = primitives_path
 
         # Load primitives
         with open(primitives_path) as f:
@@ -135,6 +136,7 @@ class Router:
         self,
         name: str,
         description: str,
+        n_args: int,
         utterances: list[str],
     ) -> None:
         """
@@ -142,9 +144,10 @@ class Router:
         Called by the code generator after creating a new primitive
         The route is added incrementally - no restart required
 
-        Args: 
-            name:        Primitive name (e.g. "isosceles_triangle")
+        Args:
+            name:        Primitive name
             description: Short description used as base utterance
+            n_args:      Number of arguments the primitive accepts
             utterances:  Auto-generated utterance variants
         """
         new_route = Route(
@@ -155,8 +158,13 @@ class Router:
 
         self.primitives[name] = {
             "description": description,
+            "n_args": n_args,
             "utterances": utterances,
         }
+
+        with open(self._primitives_path, "w") as f:
+            yaml.safe_dump(self.primitives, f, allow_unicode=True, sort_keys=False)
+
         logger.info("Registered new primitive '%s'", name)
 
     # STEP 1 — CHUNKING

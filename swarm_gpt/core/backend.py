@@ -18,9 +18,15 @@ import numpy as np
 import yaml
 from scipy.interpolate import make_smoothing_spline
 
+import swarm_gpt.core.motion_primitives as _mp_module
+
 from swarm_gpt.core import Choreographer, DroneController
+from swarm_gpt.core.agent_b.pipeline import Pipeline
+from swarm_gpt.core.agent_b.primitive_writer import register_with_router, write_to_file
 from swarm_gpt.core.sim import simulate_axswarm
 from swarm_gpt.exception import LLMException
+
+_PRIMITIVES_PATH = Path(__file__).resolve().parent / "motion_primitives.py"
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -301,24 +307,56 @@ class AppBackend:
             logger.info("Successfully generated choreography")
             return self.choreographer.messages
         else:
-            logger.info("Agent2 code generator")
-            constraints_raw = agent_one.get("constraints", [])
-            if isinstance(constraints_raw, dict):
-                constraints = [
-                    {
-                        "name": k, "description": str(v)
-                    }
-                    for k, v in constraints_raw.items()
-                    if v is not None
-                ]
-            else: 
-                constraints = constraints_raw
-            print("DEBUG constraints converted:", constraints)
-            code = self.choreographer.agent2.generate(text, constraints)
-            self.waypoints = self.choreographer.agent2.code_to_waypoints(
-                code, self.choreographer.starting_pos, n_steps=20
-            )
-            logger.info("Successfully generated choreography")
+            # logger.info("Agent2 code generator")
+            # constraints_raw = agent_one.get("constraints", [])
+            # if isinstance(constraints_raw, dict):
+            #     constraints = [
+            #         {
+            #             "name": k, "description": str(v)
+            #         }
+            #         for k, v in constraints_raw.items()
+            #         if v is not None
+            #     ]
+            # else:
+            #     constraints = constraints_raw
+            # print("DEBUG constraints converted:", constraints)
+            # code = self.choreographer.agent2.generate(text, constraints)
+            # self.waypoints = self.choreographer.agent2.code_to_waypoints(
+            #     code, self.choreographer.starting_pos, n_steps=20
+            # )
+            # logger.info("Successfully generated choreography")
+
+            missing = agent_one.get("missing", [])
+            logger.info("Agent B: generating %d new primitive(s): %s", len(missing), missing)
+
+            nodes = Pipeline().run(missing)
+
+            # inject into running module (immediate availability, no reload)
+            for node in nodes:
+                exec(node.body, _mp_module.__dict__)  # noqa: S102
+                _mp_module.motion_primitives[node.name] = {"n_args": node.n_args}
+                self.choreographer.add_generated_primitive(
+                    name=node.name,
+                    description=node.description,
+                    definition=node.definition,
+                    body=node.body,
+                    n_args=node.n_args,
+                )
+
+            write_to_file(nodes, _PRIMITIVES_PATH)
+            register_with_router(nodes, self.choreographer.router)
+
+            # run existing system now that the new primitives are available
+            # param "text" to have the original command not just the missings
+            prompt = self.choreographer.format_initial_prompt(text)
+            response = self.choreographer.generate_choreography(prompt)
+            try:
+                self.waypoints = self.choreographer.response2waypoints(
+                    response, strict=self._strict_processing
+                )
+            except LLMException as e:
+                raise e
+            logger.info("Successfully generated choreography after primitive generation")
 
         return self.choreographer.messages
         
