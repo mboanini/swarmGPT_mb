@@ -63,7 +63,7 @@ _SPLIT_PATTERN = re.compile(
     r'and\s+then|then|after\s+that|followed\s+by|'
     r'afterwards|subsequently|finally|lastly|firstly|'
     r'secondly|thirdly|before\s+that|'
-    r',\s*(?:and\s+)?(?:then\s+)?'
+    r',(?![^()\[\]]*[)\]])(?:and\s+)?(?:then\s+)?'
     r')\s*',
     re.IGNORECASE
 )
