@@ -199,7 +199,6 @@ spiral:
   utterances:
     - "Fly outward in a spiral"
     - "Begin a spiral expansion"
-    - "Move in a corkscrew-like spiral"
     - "Trace an outward spiral path"
     - "Expand away from the center in a spiral"
     - "Start spiraling outward"
@@ -207,6 +206,9 @@ spiral:
     - "Perform a spiral motion around the center"
     - "Create a growing spiral pattern"
     - "Swirl outward from the current position"
+    - "Simple outward spiral"
+    - "Spiral outward without speed control"
+    - "Basic spiral expansion"
 
 spiral_speed:
   description: "Moves all drones in an outward spiral pattern with speed control"
@@ -221,7 +223,9 @@ spiral_speed:
     - "Perform a spiral maneuver at moderate speed"
     - "Circle outward with speed control enabled"
     - "Expand in a spiral while maintaining 1.5 m/s"
-    - "Execute a high-speed spiral pattern"
+    - "Spiral with explicit speed parameter"
+    - "Outward spiral at specified velocity"
+    - "Speed-controlled spiral expansion"
 
 helix:
   description: "Drones rise while orbiting in a helix pattern"
@@ -235,8 +239,10 @@ helix:
     - "Spiral upward like a spring"
     - "Ascend while circling the centroid"
     - "Trace a helical path into the sky"
-    - "Perform a spiral climb"
     - "Orbit and gain altitude simultaneously"
+    - "Rise while spiraling"
+    - "Helical ascent"
+    - "Circular orbit while gaining altitude"
 
 twister:
   description: "Spinning cone that rotates while moving vertically"
@@ -250,8 +256,10 @@ twister:
     - "Form a vertical spinning vortex"
     - "Create a cyclone-shaped motion"
     - "Twist upward like a whirlwind"
-    - "Perform a tornado-style climb"
     - "Generate a rotating funnel pattern"
+    - "Rotating cone shape moving vertically"
+    - "Spinning funnel ascending"
+    - "Cone that spins while rising vertically"
 
 zig_zag:
   description: "Moves drones in a zigzag pattern"

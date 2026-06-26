@@ -443,81 +443,81 @@ class Choreographer:
         t = np.tile(np.concatenate(([0], timestamps)), (pos.shape[0], 1))
         return {"time": t, "pos": pos, "vel": np.zeros_like(pos), "acc": np.zeros_like(pos)}
 
-    def _handle_hybrid_choreography(self, choreo_steps: dict, timestamps: NDArray) -> dict:
-        # 1. Prepariamo la matrice dei risultati (n_drones, T+1, 3)
-        # T+1 perché includiamo la posizione di partenza al tempo 0
-        full_pos = np.zeros((self.num_drones, len(timestamps) + 1, 3))
+    # def _handle_hybrid_choreography(self, choreo_steps: dict, timestamps: NDArray) -> dict:
+    #     # 1. Prepariamo la matrice dei risultati (n_drones, T+1, 3)
+    #     # T+1 perché includiamo la posizione di partenza al tempo 0
+    #     full_pos = np.zeros((self.num_drones, len(timestamps) + 1, 3))
 
-        # Inizializziamo il tempo 0 con le posizioni iniziali
-        start_pos_meters = np.array(list(self.starting_pos.values()))
-        full_pos[:, 0, :] = start_pos_meters
+    #     # Inizializziamo il tempo 0 con le posizioni iniziali
+    #     start_pos_meters = np.array(list(self.starting_pos.values()))
+    #     full_pos[:, 0, :] = start_pos_meters
 
-        # Posizione corrente per le funzioni (in cm per compatibilità con le tue primitive)
-        current_swarm_cm = {i: p.copy() * 100 for i, p in enumerate(start_pos_meters)}
+    #     # Posizione corrente per le funzioni (in cm per compatibilità con le tue primitive)
+    #     current_swarm_cm = {i: p.copy() * 100 for i, p in enumerate(start_pos_meters)}
 
-        for i, step_idx in enumerate(sorted(choreo_steps.keys())):
-            content = choreo_steps[step_idx].strip()
-            t_prev = 0 if i == 0 else timestamps[i-1]
-            t_curr = timestamps[i]
+    #     for i, step_idx in enumerate(sorted(choreo_steps.keys())):
+    #         content = choreo_steps[step_idx].strip()
+    #         t_prev = 0 if i == 0 else timestamps[i-1]
+    #         t_curr = timestamps[i]
 
-            if content.startswith("[["):
-                # --- PARTE RAW ---
-                coords = np.array(ast.literal_eval(content), dtype=np.float64) / 100.0
-                full_pos[:, i+1, :] = coords
-                # Aggiorniamo lo stato corrente per la funzione successiva
-                current_swarm_cm = {idx: p * 100 for idx, p in enumerate(coords)}
-            else:
-                # --- PARTE PRIMITIVE ---
-                # Qui usiamo la tua logica esistente: _primitive2waypoints
-                # Nota: Devi gestire il nome della funzione e gli argomenti come fai in _choreo2waypoints
-                fn_name, args = self._parse_single_primitive(content)
+    #         if content.startswith("[["):
+    #             # --- PARTE RAW ---
+    #             coords = np.array(ast.literal_eval(content), dtype=np.float64) / 100.0
+    #             full_pos[:, i+1, :] = coords
+    #             # Aggiorniamo lo stato corrente per la funzione successiva
+    #             current_swarm_cm = {idx: p * 100 for idx, p in enumerate(coords)}
+    #         else:
+    #             # --- PARTE PRIMITIVE ---
+    #             # Qui usiamo la tua logica esistente: _primitive2waypoints
+    #             # Nota: Devi gestire il nome della funzione e gli argomenti come fai in _choreo2waypoints
+    #             fn_name, args = self._parse_single_primitive(content)
 
-                # La tua funzione restituisce la nuova posizione e i waypoint generati
-                new_pos_cm, step_waypoints = self._primitive2waypoints(
-                    fn_name, args, current_swarm_cm, t_prev, t_curr
-                )
+    #             # La tua funzione restituisce la nuova posizione e i waypoint generati
+    #             new_pos_cm, step_waypoints = self._primitive2waypoints(
+    #                 fn_name, args, current_swarm_cm, t_prev, t_curr
+    #             )
 
-                # Estraiamo la posizione finale del drone per questo step (convertita in metri)
-                for d_id in range(self.num_drones):
-                    # step_waypoints[t_curr][d_id] è la posizione calcolata dalla funzione
-                    full_pos[d_id, i+1, :] = step_waypoints[t_curr][d_id] / 100.0
+    #             # Estraiamo la posizione finale del drone per questo step (convertita in metri)
+    #             for d_id in range(self.num_drones):
+    #                 # step_waypoints[t_curr][d_id] è la posizione calcolata dalla funzione
+    #                 full_pos[d_id, i+1, :] = step_waypoints[t_curr][d_id] / 100.0
 
-                current_swarm_cm = new_pos_cm
+    #             current_swarm_cm = new_pos_cm
 
-        return {
-            "time": np.tile(np.concatenate(([0], timestamps)), (self.num_drones, 1)),
-            "pos": full_pos,
-            "vel": np.zeros_like(full_pos),
-            "acc": np.zeros_like(full_pos)
-        }
+    #     return {
+    #         "time": np.tile(np.concatenate(([0], timestamps)), (self.num_drones, 1)),
+    #         "pos": full_pos,
+    #         "vel": np.zeros_like(full_pos),
+    #         "acc": np.zeros_like(full_pos)
+    #     }
 
-    def _parse_single_primitive(self, content: str) -> tuple[str, tuple]:
-        """Estrae nome e argomenti da una stringa tipo 'spiral(10, 100)'."""
-        try:
-            # 1. Pulizia e separazione: 'spiral(10, 100)' -> ['spiral', '10, 100)']
-            parts = content.split("(", 1)
-            fn_name = parts[0].strip().lower()
+    # def _parse_single_primitive(self, content: str) -> tuple[str, tuple]:
+    #     """Estrae nome e argomenti da una stringa tipo 'spiral(10, 100)'."""
+    #     try:
+    #         # 1. Pulizia e separazione: 'spiral(10, 100)' -> ['spiral', '10, 100)']
+    #         parts = content.split("(", 1)
+    #         fn_name = parts[0].strip().lower()
 
-            # 2. Pulizia degli argomenti: '10, 100)' -> '10, 100'
-            raw_args = parts[1].rsplit(")", 1)[0]
+    #         # 2. Pulizia degli argomenti: '10, 100)' -> '10, 100'
+    #         raw_args = parts[1].rsplit(")", 1)[0]
 
-            # 3. Conversione in tupla Python sicura
-            # Aggiungiamo una virgola finale per gestire il caso di un singolo argomento (es. '(100,)')
-            fn_args = ast.literal_eval("(" + raw_args + ",)")
+    #         # 3. Conversione in tupla Python sicura
+    #         # Aggiungiamo una virgola finale per gestire il caso di un singolo argomento (es. '(100,)')
+    #         fn_args = ast.literal_eval("(" + raw_args + ",)")
 
-            # Rimuoviamo la virgola extra se ast l'ha aggiunta a un singolo elemento
-            if isinstance(fn_args, tuple) and len(fn_args) > 0:
-                # Se l'ultimo elemento è vuoto a causa della nostra virgola forzata, lo togliamo
-                # Ma ast.literal_eval di solito gestisce bene (10,)
-                pass
+    #         # Rimuoviamo la virgola extra se ast l'ha aggiunta a un singolo elemento
+    #         if isinstance(fn_args, tuple) and len(fn_args) > 0:
+    #             # Se l'ultimo elemento è vuoto a causa della nostra virgola forzata, lo togliamo
+    #             # Ma ast.literal_eval di solito gestisce bene (10,)
+    #             pass
 
-            return fn_name, fn_args
+    #         return fn_name, fn_args
 
-        except Exception as e:
-            raise LLMFormatError(
-                f"Could not parse motion primitive: '{content}'. "
-                f"Ensure it follows the format 'function_name(arg1, arg2)'. Error: {e}"
-            )
+    #     except Exception as e:
+    #         raise LLMFormatError(
+    #             f"Could not parse motion primitive: '{content}'. "
+    #             f"Ensure it follows the format 'function_name(arg1, arg2)'. Error: {e}"
+    #         )
 
     @staticmethod
     def _slice_choreography_from_text(text: str) -> dict[int, str]:
