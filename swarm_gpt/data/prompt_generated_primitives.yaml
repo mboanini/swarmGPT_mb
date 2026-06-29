@@ -1,0 +1,7 @@
+content: |-
+  ## GENERATED PRIMITIVES — TREAT AS BUILT-IN
+  The following primitives were generated in previous sessions.
+  They are fully valid.
+
+  You MUST use them when the command matches, exactly like any primitive in ## AVAILABLE PRIMITIVES.
+  Do NOT compute manual waypoints when a generated primitive applies.

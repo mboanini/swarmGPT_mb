@@ -22,7 +22,7 @@ import swarm_gpt.core.motion_primitives as _mp_module
 
 from swarm_gpt.core import Choreographer, DroneController
 from swarm_gpt.core.agent_b.pipeline import Pipeline
-from swarm_gpt.core.agent_b.primitive_writer import register_with_router, write_to_file
+from swarm_gpt.core.agent_b.primitive_writer import register_with_router, write_descriptions_to_yaml, write_to_file
 from swarm_gpt.core.sim import simulate_axswarm
 from swarm_gpt.exception import LLMException
 
@@ -335,15 +335,9 @@ class AppBackend:
             for node in nodes:
                 exec(node.body, _mp_module.__dict__)  # noqa: S102
                 _mp_module.motion_primitives[node.name] = {"n_args": node.n_args}
-                self.choreographer.add_generated_primitive(
-                    name=node.name,
-                    description=node.description,
-                    definition=node.definition,
-                    body=node.body,
-                    n_args=node.n_args,
-                )
 
             write_to_file(nodes, _PRIMITIVES_PATH)
+            write_descriptions_to_yaml(nodes)
             register_with_router(nodes, self.choreographer.router)
 
             # run existing system now that the new primitives are available
