@@ -10,7 +10,7 @@ from swarm_gpt.core.agent_b.prompt.generate_utterances_prompt import UTTERANCES_
 
 _GENERATED_YAML_PATH = Path(__file__).resolve().parents[2] / "data/prompt_generated_primitives.yaml"
 
-
+# insert into prompts_no_music.yaml
 class _LiteralStr(str):
     pass
 
@@ -22,17 +22,15 @@ def _literal_representer(dumper, data):
 class _LiteralDumper(yaml.Dumper):
     pass
 
-
+# to mantain the original line spaces and breaks (no everything in a single line)
 _LiteralDumper.add_representer(_LiteralStr, _literal_representer)
 
 def write_descriptions_to_yaml(
     nodes: list[FunctionNode], yaml_path: Path = _GENERATED_YAML_PATH
 ) -> None:
     """Append newly generated primitive descriptions to prompt_generated_primitives.yaml.
-
-    Reads the current `content`, appends one formatted block per node
-    (in prompts_no_music.yaml style), then writes the file back.
     """
+    # open yaml
     with open(yaml_path, "r") as f:
         data = yaml.safe_load(f) or {}
 

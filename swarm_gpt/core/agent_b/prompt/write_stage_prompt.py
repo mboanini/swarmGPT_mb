@@ -31,11 +31,6 @@ The signature and docstring have already been designed — preserve them exactly
 {function_definition}
 ```
 
-## Available helpers (already in scope — do NOT import them)
-```python
-{robot_api}
-```
-
 ## Existing primitives — use as implementation reference
 ```python
 {other_functions}
@@ -43,16 +38,6 @@ The signature and docstring have already been designed — preserve them exactly
 
 ## Physical constraints — SAFETY CRITICAL
 {constraints}
-
-## Spatial bounds — clip ALL positions before emitting waypoints or returning final_pos
-```python
-x_lo, x_hi = limits["lower"][0] * 100, limits["upper"][0] * 100  # cm
-y_lo, y_hi = limits["lower"][1] * 100, limits["upper"][1] * 100
-z_lo, z_hi = limits["lower"][2] * 100, limits["upper"][2] * 100
-pos[:, 0] = np.clip(pos[:, 0], x_lo, x_hi)
-pos[:, 1] = np.clip(pos[:, 1], y_lo, y_hi)
-pos[:, 2] = np.clip(pos[:, 2], z_lo, z_hi)
-```
 
 ## Output format
 ### Reasoning: (plain text only — do NOT include python code blocks here)
@@ -74,11 +59,14 @@ def {function_name}(params, swarm_pos, tstart, tend, limits):
 - Always unpack params with one destructuring line: `drone_ids, p1, p2, ... = params`. Never use index access.
 - Call `_sanitize_drone_ids(drone_ids, swarm_pos.shape[0])` before using drone_ids as indices.
 - Use `_assign_positions` when assigning drones to new target positions.
+- Each drone must occupy a unique position at every timestep - two or more drones cannot be in the same position at the same timestep.
 - Waypoint keys are the **0-based** drone indices returned by `_sanitize_drone_ids` (or `range(n_drones)` when all drones move).
 - **`final_pos` must be shape `(n_drones, 3)` and cover ALL drones.** If only a subset moves, start from `swarm_pos.copy()` and update only those rows.
 - Clip all computed positions to the spatial bounds (see above) before putting them in waypoints or `final_pos`.
 - Do NOT use while loops, raise, or assert statements.
+- Always len(waypoints) > 0
 - At least one waypoint must be emitted with timestamp strictly in `(tstart, tend]`.
+- The final position must be semantically coherent with the intent and the user reqiest
 
 ## CRITICAL — des_pos must always be 2D shape (n_drones, 3)
 `_assign_positions(pos, des_pos)` requires BOTH arguments to be 2D `(n_drones, 3)`.
