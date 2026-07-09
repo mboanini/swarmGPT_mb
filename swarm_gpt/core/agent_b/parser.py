@@ -35,18 +35,19 @@ class FunctionParser:
 
         if not func_nodes:
             raise ValueError("No function definition found in the code.")
-        if len(func_nodes) > 1:
-            raise ValueError("More than one function definition found in the code.")
 
-        self._func_name = func_nodes[0].name
+        # Multiple functions are allowed (e.g. helpers + main); use the last one as _func_name
+        self._func_name = func_nodes[-1].name
 
         match = re.search(r"#\s*n_args:\s*(\d+)", self._code)
         self._n_args = int(match.group(1)) if match else 0
 
     def check_function_name(self, expected: str):
-        if self._func_name != expected:
+        tree = ast.parse(self._code)
+        all_names = [n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]
+        if expected not in all_names:
             raise ValueError(
-                f"Function name mismatch: expected '{expected}', got '{self._func_name}'."
+                f"Function '{expected}' not found in code. Found: {all_names}"
             )
 
     @property

@@ -8,13 +8,18 @@ class State(Enum):
 
 
 class FunctionNode:
-    def __init__(self, name: str, description: str):
-        self.name         = name
-        self._description = description
-        self._definition  = ""   # Design output: signature + docstring + pass
-        self._body        = ""   # Write output:  full implementation
-        self._n_args      = 0    # extracted from # n_args: N in definition
-        self._state       = State.NOT_STARTED
+    def __init__(self, name: str, description: str, user_command: str = ""):
+        self.name          = name
+        self._description  = description
+        self._user_command = user_command
+        self._definition   = ""    # Design output: signature + docstring + pass
+        self._body         = ""    # Write output:  full implementation
+        self._n_args = 0     # extracted from # n_args: N in definition
+        self._state        = State.NOT_STARTED
+
+    @property
+    def user_command(self):
+        return self._user_command
 
     @property
     def description(self):

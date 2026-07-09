@@ -64,6 +64,8 @@ def {function_name}(params, swarm_pos, tstart, tend, limits):
 - **`final_pos` must be shape `(n_drones, 3)` and cover ALL drones.** If only a subset moves, start from `swarm_pos.copy()` and update only those rows.
 - Clip all computed positions to the spatial bounds (see above) before putting them in waypoints or `final_pos`.
 - Do NOT use while loops, raise, or assert statements.
+- Do NOT implement manual collision avoidance (per-step drone separation loops) — the system handles this.
+- Never divide by a computed value (e.g. a norm) without first checking it is > 0.
 - Always len(waypoints) > 0
 - At least one waypoint must be emitted with timestamp strictly in `(tstart, tend]`.
 - The final position must be semantically coherent with the intent and the user reqiest
