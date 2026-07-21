@@ -1,10 +1,13 @@
 import json
+from pathlib import Path
 
+import yaml
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from swarm_gpt.core._llm_client import client
 from swarm_gpt.core.agent_b.prompt.func_description_prompt import DESCRIBE_PROMPT
-from swarm_gpt.core.motion_primitives import motion_primitives
+
+_PRIMITIVES_PATH = Path(__file__).resolve().parents[2] / "data/primitives.yaml"
 
 
 class DescribePrimitive:
@@ -12,8 +15,13 @@ class DescribePrimitive:
         self._model = model
 
     def run(self, user_command: str) -> tuple[str, str]:
+        with open(_PRIMITIVES_PATH) as f:
+            primitives = yaml.safe_load(f)
+        existing_primitives = "\n".join(
+            f"- {name}: {data['description']}" for name, data in primitives.items()
+        )
         prompt = DESCRIBE_PROMPT.format(
-            existing_names=", ".join(motion_primitives.keys()),
+            existing_primitives=existing_primitives,
             user_command=user_command,
         )
         data = self._call_llm(prompt)

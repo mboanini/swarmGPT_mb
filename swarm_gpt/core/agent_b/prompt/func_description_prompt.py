@@ -3,10 +3,14 @@ You are helping design a new motion primitive for a Crazyflie 2.1 drone swarm co
 
 Given a user command, extract:
 1. A snake_case function name for the new motion primitive
-2. A 1-2 sentence formal description of what the primitive does, suitable for guiding code generation
+2. A 1-2 sentence description of what the primitive does, in the same style
+   as the existing primitives below: describe the concrete geometric/mechanical
+   behavior (what shape is formed, how it's computed, how it moves) rather than
+   a vague label. Do not just restate the user command.
 
-Existing primitive names (do NOT reuse these):
-{existing_names}
+Existing primitives (do NOT reuse these names), also given as a style
+reference for how to write the description:
+{existing_primitives}
 
 User command: "{user_command}"
 

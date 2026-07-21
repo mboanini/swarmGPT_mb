@@ -1,12 +1,9 @@
-import json
 import re
 from pathlib import Path
 
 import yaml
 
-from swarm_gpt.core._llm_client import client
 from swarm_gpt.core.agent_b.function_node import FunctionNode
-from swarm_gpt.core.agent_b.prompt.generate_utterances_prompt import UTTERANCES_PROMPT
 
 _GENERATED_YAML_PATH = Path(__file__).resolve().parents[2] / "data/prompt_generated_primitives.yaml"
 
@@ -120,27 +117,10 @@ def _insert_dict_entry(content: str, name: str, n_args: int) -> str:
     return '\n'.join(lines)
 
 
-# Semantic Router (Route) + primitives.yaml
-def _generate_utterances(name: str, description: str) -> list[str]:
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": UTTERANCES_PROMPT},
-            {"role": "user", "content": f"name: {name}\ndescription: {description}"},
-        ],
-        response_format={"type": "json_object"},
-        temperature=0.7,
-    )
-    data = json.loads(response.choices[0].message.content)
-    return data.get("utterances", [])
-
-
 def register_with_router(nodes: list[FunctionNode], router) -> None:
     for node in nodes:
-        utterances = _generate_utterances(node.name, node.description)
         router.register_primitive(
             name=node.name,
             description=node.description,
             n_args=node.n_args,
-            utterances=utterances,
         )
