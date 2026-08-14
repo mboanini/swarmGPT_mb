@@ -29,6 +29,15 @@ if TYPE_CHECKING:
 # client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # moved to swarm_gpt/core/_llm_client.py
 logger = logging.getLogger(__name__)
 
+# Primitives whose first argument is a `steps` count that is genuinely used to compute
+# `dt = (tend - tstart) / steps` and therefore intrinsically determines how long they last
+# (steps * STEP_DURATION seconds) — independent of PLAN. `spiral_speed` also takes a `steps`
+# argument but silently discards it (motion_primitives.py overwrites it from the window size),
+# so it is deliberately NOT included here: it behaves like `rotate`/`move_z` instead, filling
+# whatever window PLAN(n) gives it.
+EXPLICIT_STEPS_PRIMITIVES = {"spiral", "helix", "twister", "zig_zag", "wave"}
+STEP_DURATION = 0.5  # seconds per default tick, and the unit PLAN(n) counts in
+
 
 # Investigate and improve error message for the case when func = "", and we get key error, during sanitize llm output
 # Also improve error message when there is an issue with function output, so that we can re-prompt with super specific messag
@@ -216,33 +225,20 @@ class Choreographer:
         """
         # Convert to cm for LLM compatibility
         starting_pos = [(pos * 100).astype(int).tolist() for pos in self.starting_pos.values()]
-        # wave_eqn = None
-        if self.use_motion_primitives:
-            # num_waypoints = 6
-            wave_eqn = ""
-            # Load the YAML file
-            latex_file = Path(__file__).resolve().parents[1] / "data/latex_eqn.yaml"
-            with open(latex_file, "r") as file:
-                data = yaml.safe_load(file)
-                wave_eqn = data.get("wave", "")
-        else:
-            wave_eqn = None
-            latex_file = Path(__file__).resolve().parents[1] / "data/latex_eqn.yaml"
-            with open(latex_file, "r") as file:
-                data = yaml.safe_load(file)
-                wave_eqn = data.get("wave")
-
-        prompt_kwargs = {
-            "prompt": user_command,
-            "num_drones": self.num_drones,
-            "starting_pos": starting_pos,
-            "lim_lower": self.lim_lower * 100,
-            "lim_upper": self.lim_upper * 100,
-            "max_distances": self.settings["axswarm"]["vel_max"] * 0.5,
-            # "num_waypoints": num_waypoints,
-            "wave_eqn": wave_eqn,
-        }
-        return self.prompts["user_initial"].format(**prompt_kwargs)
+        max_speed_cm_s = self.settings["axswarm"]["vel_max"] * 100
+        # `user_initial` also contains many other `{...}` placeholders (e.g. `{drone_id}`,
+        # `{steps}`) that are part of the primitive documentation text, not meant to be
+        # substituted here, so we replace only the specific runtime values instead of calling
+        # `.format()` on the whole string. `{prompt}` is replaced last so the raw user command
+        # can't be mistaken for one of the other placeholders.
+        text = (
+            self.prompts["user_initial"]
+            .replace("{num_drones}", str(self.num_drones))
+            .replace("{starting_pos}", str(starting_pos))
+            .replace("{max_speed}", str(int(max_speed_cm_s)))
+            .replace("{max_dist_per_step}", str(int(max_speed_cm_s * 0.5)))
+        )
+        return text.replace("{prompt}", user_command)
 
     def _call_openai(self, messages: list[dict[str, str]]) -> str:
         response = client.chat.completions.create(
@@ -316,7 +312,7 @@ class Choreographer:
         elif none_raw:
             logger.info("Executing Case 2: Pure Motion Primitives: ")
             print(choreo_steps)
-            waypoints = self._choreo2waypoints(choreo_steps, timestamps)
+            waypoints = self._choreo2waypoints(choreo_steps)
 
         # CASO 3: Ibrido (Il "Mix")
         # else:
@@ -347,12 +343,10 @@ class Choreographer:
         return choreography
 
     def _choreo2waypoints(
-        self, choreography: dict[int, list[str]], timestamps: list[float]
+        self, choreography: dict[int, list[str]]
     ) -> dict[int, np.ndarray]:
         """Translate the choreography into waypoints."""
-        print("choreographer.py - _choreo2waypoints: input timestamps = ")
-        print(timestamps)
-        if missing := set(range(1, len(timestamps) + 1)) - set(choreography.keys()):
+        if missing := set(range(1, len(choreography) + 1)) - set(choreography.keys()):
             raise LLMResponseProcessingError(f"Choreography plan is missing primitive at {missing}")
 
         motion_primitives = {}
@@ -364,7 +358,17 @@ class Choreographer:
                 move = move.strip()
                 fn_name = move.split("(")[0].strip(" -\n")
                 if fn_name == "PLAN":
-                    motion_primitives[i].append({fn_name: ()})
+                    if "(" in move:
+                        raw_arg = move.split("(")[1].split(")")[0]
+                        try:
+                            duration = float(raw_arg.strip())
+                        except ValueError:
+                            raise LLMFormatError(
+                                f"Cannot interpret PLAN duration '{move}' at timestep {i}"
+                            )
+                        motion_primitives[i].append({fn_name: (duration,)})
+                    else:
+                        motion_primitives[i].append({fn_name: ()})
                     continue
                 if fn_name.lower() not in motion_primitives_collection:
                     raise LLMResponseProcessingError(
@@ -388,7 +392,7 @@ class Choreographer:
                     )
                 motion_primitives[i].append({fn_name: fn_args})
 
-        t, pos = self._motion_primitives2time_and_pos(motion_primitives, timestamps)
+        t, pos = self._motion_primitives2time_and_pos(motion_primitives)
         return {"time": t, "pos": pos, "vel": np.zeros_like(pos), "acc": np.zeros_like(pos)}
 
     def _raw_response2waypoints(self, text: str, timestamps: NDArray) -> dict[int, np.ndarray]:
@@ -543,7 +547,7 @@ class Choreographer:
         return dict(sorted(choreography_steps.items()))
 
     def _motion_primitives2time_and_pos(
-        self, motion_primitives: dict, timestamps: NDArray
+        self, motion_primitives: dict
     ) -> tuple[NDArray, NDArray]:
         """Convert motion primitives to waypoint.
 
@@ -554,10 +558,7 @@ class Choreographer:
         # TODO: Remove all conversions into cm
         swarm_pos = np.array(list(self.starting_pos.values())) * 100
         waypoints[0] = {i: p.copy() for i, p in enumerate(swarm_pos)}
-        # Add time information to the motion_primitives, filter out PLAN motion_primitives, add
-        # additional time to the function before plan
-        timestamps = np.concatenate(([0], timestamps))  # Add 0 start time
-        motion_primitives = self._merge_motion_primitives(motion_primitives, timestamps)
+        motion_primitives = self._merge_motion_primitives(motion_primitives)
         for motion_primitive in motion_primitives.values():
             for fn, args in zip(motion_primitive["fn"], motion_primitive["args"]):
                 swarm_pos, _waypoints = self._primitive2waypoints(
@@ -592,57 +593,47 @@ class Choreographer:
                     waypoint[drone_id] = list(waypoints.values())[i - 1][drone_id]
         return waypoints
 
-    def _merge_motion_primitives(self, motion_primitives: dict, timesteps: NDArray) -> dict:
-        """Merge and annotate motion primitives.
+    def _merge_motion_primitives(self, motion_primitives: dict) -> dict:
+        """Merge and annotate motion primitives with tstart/tend using a cumulative clock.
 
-        Merge multiple motion primitives for a single timestep, add time information and add the
-        time from PLAN motion_primitives to the previous function.
+        Each entry's `tstart` is wherever the clock stands when it's processed. How far the
+        clock then advances depends on the entry:
+          - Primitives in EXPLICIT_STEPS_PRIMITIVES intrinsically last `steps * STEP_DURATION`
+            seconds, computed from their own first argument — independent of anything else.
+          - Everything else defaults to a single STEP_DURATION tick.
+        `PLAN`/`PLAN(n)` doesn't advance the clock on its own — it extends the `tend` of the
+        immediately preceding (non-PLAN) entry by STEP_DURATION, or by n seconds if given.
         """
         merged_motion_primitives = []
-        # Filter out any PLAN motion_primitives that are at the end of the list. Make sure to not cut off
-        # any other motion_primitives.
-        if max(motion_primitives.keys()) >= len(timesteps):
-            excess_primitives = [
-                [list(d.keys())[0] for d in motion_primitives[i]]
-                for i in motion_primitives
-                if i >= len(timesteps)
-            ]
-            if not all("PLAN" in primitive for primitive in excess_primitives):
-                raise LLMFormatError(
-                    "Number of timesteps in output doesn't match the number of beats."
-                )
-            motion_primitives = {
-                i: motion_primitives[i] for i in motion_primitives if i < len(timesteps)
-            }
+        running_t = 0.0
         for i in sorted(motion_primitives):
             fns = [list(d.keys())[0] for d in motion_primitives[i]]
-            if i == 1 and "PLAN" in fns:
-                raise LLMFormatError("PLAN can't be in the first step.")
             if "PLAN" in fns:
-                merged_motion_primitives[-1]["tend"] = timesteps[i]
-                merged_motion_primitives[-1]["steps"] += 1
+                if not merged_motion_primitives:
+                    raise LLMFormatError("PLAN can't be in the first step.")
+                plan_args = next(d["PLAN"] for d in motion_primitives[i] if "PLAN" in d)
+                duration = plan_args[0] if plan_args else STEP_DURATION
+                running_t += duration
+                merged_motion_primitives[-1]["tend"] = running_t
                 continue
+
+            args_by_fn = {list(d.keys())[0]: list(d.values())[0] for d in motion_primitives[i]}
+            duration = max(
+                args[0] * STEP_DURATION if fn.lower() in EXPLICIT_STEPS_PRIMITIVES else STEP_DURATION
+                for fn, args in args_by_fn.items()
+            )
+            tstart = running_t
+            running_t += duration
             merged_motion_primitives.append(
                 {
                     "fn": fns,
-                    "args": [list(d.values())[0] for d in motion_primitives[i]],
+                    "args": list(args_by_fn.values()),
                     "key": i,
-                    "steps": 1,
-                    "tstart": timesteps[i - 1],
-                    "tend": timesteps[i],
+                    "tstart": tstart,
+                    "tend": running_t,
                 }
             )
-        motion_primitives = {primitive["key"]: primitive for primitive in merged_motion_primitives}
-        # Check that the motion primitives do not exceed the number of waypoints
-        for motion_primitive in motion_primitives.values():
-            if motion_primitive["key"] + motion_primitive["steps"] > len(timesteps):
-                raise LLMFormatError(
-                    (
-                        f"Function {motion_primitive['fn']} at time {motion_primitive['key']} "
-                        f"exceeds the number of allowed waypoints {len(timesteps)}"
-                    )
-                )
-        return motion_primitives
+        return {primitive["key"]: primitive for primitive in merged_motion_primitives}
 
     def _primitive2waypoints(
         self, fn_name: str, args: tuple, swarm_pos: dict, tstart: float, tend: float

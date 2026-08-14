@@ -140,26 +140,58 @@ swarm_pos = [deque(maxlen=100) for _ in range(sim.n_drones)]
 tstart   = time.time()
 n_steps  = int(duration * sim.control_freq)
 
+# --- Diagnostica temporanea: misura dove va il tempo reale del loop -------
+spline_time   = 0.0
+step_time     = 0.0
+draw_time     = 0.0
+mjrender_time = 0.0
+sleep_time    = 0.0
+render_count  = 0
+loop_wall_start = time.time()
+# ----------------------------------------------------------------------------
+
 try:
     for i in range(n_steps):
         ct = i / sim.control_freq
+
+        _t0 = time.perf_counter()
         des_pos = np.array([[s(ct) for s in splines[j]] for j in splines])
         des_vel = np.array([[s(ct) for s in vel_splines[j]] for j in splines])
         controls = np.concatenate(
             (des_pos, des_vel, np.zeros((sim.n_drones, 7))), axis=-1
         )[None, ...]
+        spline_time += time.perf_counter() - _t0
+
+        _t0 = time.perf_counter()
         sim.state_control(controls)
         sim.step(sim.freq // sim.control_freq)
+        step_time += time.perf_counter() - _t0
 
         if ((i * fps) % sim.control_freq) < fps:
+            _t0 = time.perf_counter()
             for j, dq in enumerate(swarm_pos):
                 dq.append(np.asarray(sim.data.states.pos[0, j]))
                 draw_line(sim, np.array(dq), rgba=rgbas[j % len(rgbas)], min_size=2, max_size=5)
+            draw_time += time.perf_counter() - _t0
+
+            _t0 = time.perf_counter()
             sim.render()
+            mjrender_time += time.perf_counter() - _t0
+
+            render_count += 1
             dt = ct - (time.time() - tstart)
             if dt > 0:
                 time.sleep(dt)
+                sleep_time += dt
 finally:
+    total_wall = time.time() - loop_wall_start
+    print(
+        f"[VIZ TIMING] expected_duration={duration:.2f}s actual_wall={total_wall:.2f}s "
+        f"n_steps={n_steps} renders={render_count} | "
+        f"spline_eval={spline_time:.2f}s sim_step={step_time:.2f}s "
+        f"draw_line={draw_time:.2f}s mj_render={mjrender_time:.2f}s slept={sleep_time:.2f}s",
+        flush=True,
+    )
     sim.close()
 """
 
