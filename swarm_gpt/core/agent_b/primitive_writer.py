@@ -36,7 +36,8 @@ def write_descriptions_to_yaml(
     for node in nodes:
         if f"  {node.name}(" in content:
             continue  # already present, skip to avoid conflicting duplicates
-        content = content.rstrip("\n") + "\n\n" + _format_entry(node)
+        entry = _format_entry(node)
+        content = content.rstrip("\n") + "\n\n" + entry if content.strip() else entry
 
     data["content"] = _LiteralStr(content)
     with open(yaml_path, "w") as f:
@@ -57,10 +58,15 @@ def _format_entry(node: FunctionNode) -> str:
 
 
 def _extract_param_names(defn: str, n_args: int) -> list[str]:
-    """Extract param names from 'params: tuple[...] — (name1, name2, ...)' in docstring."""
+    """Extract param names from docstring. Tries inline format first, then per-line."""
+    # inline: params: tuple[...] — (name1, name2, ...)
     m = re.search(r"params:\s*tuple\[.*?\]\s*[—\-]+\s*\(([\w,\s]+)\)", defn)
     if m:
         return [n.strip() for n in m.group(1).split(",")][:n_args]
+    # per-line: "    name: type — description"
+    names = re.findall(r"^\s{4,8}(\w+)\s*:\s*\S+\s*[—\-]", defn, re.MULTILINE)
+    if names:
+        return names[:n_args]
     return [f"p{i + 1}" for i in range(n_args)]
 
 

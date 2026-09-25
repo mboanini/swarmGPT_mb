@@ -44,7 +44,7 @@ class Pipeline:
             raise ValueError(f"Invalid primitive: {errors}")
         print("OK Validator")
 
-        node         = FunctionNode(name=name, description=description, user_command=cmd)
+        node = FunctionNode(name=name, description=description, user_command=cmd)
         staging_path = _STAGING_DIR / f"{name}.py"
 
         # --- Design ---

@@ -8,13 +8,6 @@ each part of the command (it may describe several distinct motions/formations)
 is covered by an existing primitive, and returns the exact wording of every
 part that is NOT covered.
 
-No embeddings, no thresholds: raw similarity between short phrases can't
-reliably separate genuine matches from false positives (measured directly on
-this codebase — e.g. form_cone's real matches scored 0.674-0.874 against
-false positives at 0.544-0.769, fully overlapping ranges). An LLM with the
-actual primitive descriptions in context can reason about intent instead of
-comparing vector distance.
-
 Returns:
     {
         "routing": "existing_system" | "code_generation",

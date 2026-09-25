@@ -50,7 +50,20 @@ def {function_name}(
   - `final_pos`: NDArray (n_drones, 3) in cm — positions after this primitive ends.
   - `waypoints`: dict[float, dict[int, NDArray]] — timestamp to drone_id to position in cm.
 
-## Available helpers (already in scope — do NOT import them)
+## Timing Rule
+Pick whichever of these two shapes matches `{function_des}`.
+- Reaches a shape/position and then holds still (most formations and simple moves): the
+  LAST element of `params` must be a float named `time_to_finish_s`. Study `form_circle`,
+  `form_star`, `form_cone` among the existing primitives below for this shape.
+- A continuous, evolving motion where the drone keeps moving throughout — a spiral, a wave,
+  a spin, a coverage sweep, a patrol path, a systematic traversal — that should genuinely
+  take longer the more of it there is: the FIRST element of `params` must be an integer
+  named `steps`. Study `spiral`, `helix`, `twister` below for this shape.
+
+Decision test: does the drone keep moving for the full duration, or does it arrive
+somewhere and stop? Keeps moving -> `steps`. Arrives and stops -> `time_to_finish_s`.
+
+## Available helpers (already in scope — do NOT import or implement them)
 ```python
 {robot_api}
 ```
@@ -62,6 +75,16 @@ def {function_name}(
 
 ## Physical constraints
 {constraints}
+
+## Notes
+- The signature is fixed — never add or remove arguments.
+- `params` is the only design choice: keep N between 1 and 4.
+- The `# n_args: N` comment is mandatory — replace N with the TOTAL number of elements in the
+  params tuple. If drone_ids is the first element, it counts: e.g. `(drone_ids, radius, height)`
+  → N=3, not N=2. N must equal exactly the number of comma-separated items in the params tuple.
+- Do NOT write the body — `pass` only.
+- Do NOT add imports — `np`, `_assign_positions`, `_form_grid` are already in scope.
+- The function name must be exactly `{function_name}`.
 
 ## Output format
 ### Reasoning: (what params make sense for this behaviour, and why)
@@ -84,14 +107,4 @@ def {function_name}(params, swarm_pos, tstart, tend, limits):
     '''
     pass
 ```
-
-## Notes
-- The signature is fixed — never add or remove arguments.
-- `params` is the only design choice: keep N between 1 and 4.
-- The `# n_args: N` comment is mandatory — replace N with the TOTAL number of elements in the
-  params tuple. If drone_ids is the first element, it counts: e.g. `(drone_ids, radius, height)`
-  → N=3, not N=2. N must equal exactly the number of comma-separated items in the params tuple.
-- Do NOT write the body — `pass` only.
-- Do NOT add imports — `np`, `_assign_positions`, `_form_grid` are already in scope.
-- The function name must be exactly `{function_name}`.
 """.strip()

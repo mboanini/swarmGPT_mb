@@ -5,7 +5,6 @@ from swarm_gpt.core.motion_primitives import move, rotate, center, swap, spiral_
 # Description of helpers injected at runtime into every primitive's scope.
 # These are NOT imported by the generated function — they are already available.
 ROBOT_API_DESC = """\
-import numpy as np  # always available as `np`
 
 def _sanitize_drone_ids(drone_ids: list[int], n_drones: int) -> list[int]:
     # Convert drone IDs from 1-based (Choreographer output) to 0-based (internal indexing).
@@ -29,7 +28,30 @@ def _assign_positions(pos, des_pos):
 def _form_grid(swarm_pos, limits, height=None, spacing=None):
     # Form a grid of drones at the current position.
     # Returns NDArray (n_drones, 3) in cm, already assigned to drones.
-    # spacing: min cm between drones (default 50). height: z override in cm.\
+    # spacing: min cm between drones (default 50). height: z override in cm.
+
+def _formation_arrival_time(target_pos, des_pos, tstart, tend) -> float:
+    # Physics floor for a "move-then-hold" primitive: earliest feasible arrival time given
+    # the bottleneck drone's travel distance. Returns a time in [tstart, tend].
+    # target_pos, des_pos: NDArray (n, 3) in cm, SAME drone order.
+    # You usually don't call this directly — `_formation_waypoints` already uses it.
+
+def _formation_waypoints(target_pos, current_pos, tstart, tend, time_to_finish_s, drone_ids=None):
+    # Build the waypoints for a "move-then-hold" primitive (reach a shape/position, then stay).
+    # Clamps time_to_finish_s between the physics floor above and (tend - tstart), places the
+    # arrival waypoint there, then re-emits periodic hold waypoints until tend.
+    # target_pos:  NDArray (n, 3) in cm — desired position per drone.
+    # current_pos: NDArray (n, 3) in cm — current position of those SAME drones, same order.
+    # drone_ids: 0-based drone indices matching target_pos rows (None = all drones, in order).
+    # Returns: dict[float, dict[int, NDArray]] — use directly as (part of) the primitive's waypoints.
+    # ALWAYS use this (not a hand-written `waypoints[tend] = ...`) whenever `params` ends in
+    # `time_to_finish_s` — that's how the parameter actually takes effect.
+    # Typical usage:
+    #   assignment = _assign_positions(swarm_pos[drone_ids], des_pos)
+    #   final = des_pos[assignment]
+    #   waypoints = _formation_waypoints(final, swarm_pos[drone_ids], tstart, tend,
+    #                                     time_to_finish_s, drone_ids)
+    #   final_pos = swarm_pos.copy(); final_pos[drone_ids] = final\
 """.strip()
 
 # Source code of three representative existing primitives, loaded at import time.

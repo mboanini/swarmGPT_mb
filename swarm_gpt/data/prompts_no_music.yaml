@@ -8,9 +8,9 @@ user_initial: |
   which are explained below.
 
   <physical_constraints>
-  - Coordinates are integers cm.
-  - Bounds: x, y ∈ [-200, 200] cm, z ∈ [0, 200] cm
-  - Max speed: {max_speed} cm/s → 1 step = 0.5 seconds → at most {max_dist_per_step} cm per step
+  - Coordinates are integers in cm.
+  - Bounds: x, y in [-200, 200] cm, z in [25, 170] cm
+  - Max speed: {max_speed} cm/s -> 1 step = 0.5s -> at most {max_dist_per_step} cm per step
   - Min distance between any two drones at all times: 40 cm
   </physical_constraints>
 
@@ -21,35 +21,33 @@ user_initial: |
 
   <primitives>
   Use ONLY these. Do NOT invent new functions. Do NOT compute waypoints manually.
+  Always call primitives with positional arguments — never keyword arguments (no name=value).
 
   ### MOVEMENT
   move(x, y, z, drone_id)
     - Moves drone {drone_id} to ABSOLUTE position [x, y, z].
     - x, y, z are TARGET coordinates, NOT deltas.
-    - To move RIGHT by 50cm from current [10, 0, 100]: use move(60, 0, 100, drone_id)
     - One call per drone. For multiple drones, chain multiple move() calls.
+    - Example: current=[10,0,100], move right 50cm -> move(60, 0, 100, drone_id)
 
   move_z([drone_ids], distance)
-    - Moves drones in {drone_ids} up/down by {distance} cm (relative, can be negative).
-    - Example: move_z([...], 30) → all drones rise 30cm.
+    - Moves {drone_ids} up/down by {distance} cm (relative, can be negative).
+    - Example: move_z([...], 30) — all drones rise 30cm.
 
-  rotate(angle, axis)
-    - Rotates the ENTIRE formation by {angle} degrees around {axis}.
-    - axis must be one of: "x", "y", "z"
-    - Example: rotate(90, "z") → rotate 90° around vertical axis.
+  rotate(steps, angle, axis)
+    - Rotates the ENTIRE formation by {angle} degrees around {axis} ("x", "y", or "z").
+    - Duration = steps × 0.5s (steps-based, see TIMING).
+    - Example: rotate(20, 360, "z") — full rotation over 10s.
 
   ### FORMATIONS
   form_circle([drone_ids], z_coord, time_to_finish_s)
     - Arranges {drone_ids} in a circle at height {z_coord} cm.
-    - The radius is computed automatically to ensure ≥ 80cm spacing between drones.
-    - DO NOT pass a radius. Second argument is Z height only.
-    - {time_to_finish_s}: seconds to arrive in formation. ~1 for a snappy hit, more for a
-      slow bloom. Clamped automatically to a physically feasible minimum if too small.
-    - Example: form_circle([...], 120, 1.5) → all drones in a circle at 120cm height,
-      arriving over 1.5s, then holding there.
+    - Radius computed automatically (>= 80cm spacing). Do NOT pass a radius.
+    - {time_to_finish_s}: seconds to arrive (~2s snappy, ~5s slow). Add PLAN(time_to_finish_s + 3) after this call.
+    - Example: form_circle([...], 120, 2)
 
   center([drone_ids])
-    - Groups {drone_ids} into a tight circle centered at the swarm's current centroid.
+    - Moves {drone_ids} to a tight cluster at the swarm's current centroid.
     - Useful to regroup before a new formation.
 
   swap(drone_id_1, drone_id_2)
@@ -59,128 +57,120 @@ user_initial: |
     - Arranges drones in a star/flower pattern at {height} cm.
     - {min_spacing}: min cm between drones on inner ring (min 40).
     - {delta_radius}: cm between inner and outer ring (min 40).
-    - {time_to_finish_s}: seconds to arrive in formation. Same guidance as form_circle.
-    - Example: form_star(120, 60, 50, 1.5)
+    - {time_to_finish_s}: seconds to arrive (~2s snappy, ~5s slow). Add PLAN(time_to_finish_s + 3) after this call.
+    - Example: form_star(120, 60, 50, 2)
 
   form_cone(delta_height, spacing, is_inverted, time_to_finish_s)
     - Arranges drones in a cone shape.
     - {delta_height}: cm between each cone layer.
     - {spacing}: cm between drones within a layer.
-    - {is_inverted}: true = cone opens upward, false = cone opens downward.
-    - {time_to_finish_s}: seconds to arrive in formation. Same guidance as form_circle.
-    - Example: form_cone(30, 50, false, 1.5)
+    - {is_inverted}: 0 = opens downward, 1 = opens upward (integer, NOT true/false).
+    - {time_to_finish_s}: seconds to arrive (~2s snappy, ~5s slow). Add PLAN(time_to_finish_s + 3) after this call.
+    - Example: form_cone(30, 50, 0, 2)
 
   polygon(n_sides, height, time_to_finish_s)
-  - Arranges all drones in a regular polygon with {n_sides} sides at {height} cm.
-  - Radius is computed automatically to ensure ≥ 60cm spacing between drones.
-  - Handles mismatch between number of drones and number of sides automatically:
-      * n_drones == n_sides → one drone per vertex (exact match)
-      * n_drones > n_sides  → extra drones placed at edge midpoints between vertices
-      * n_drones < n_sides  → polygon adapts to n_drones sides (e.g. 3 drones + pentagon → triangle)
-  - Works for any polygon: triangle (3), square (4), pentagon (5), hexagon (6), etc.
-  - {time_to_finish_s}: seconds to arrive in formation. Same guidance as form_circle.
-  - Example: polygon(5, 120, 1.5) → pentagon at 120cm height
-  - Example: polygon(3, 100, 1.0) → triangle at 100cm height
+    - Arranges all drones in a regular polygon at {height} cm. Radius auto-computed.
+    - Mismatch handling: n_drones > n_sides -> extra drones at edge midpoints;
+      n_drones < n_sides -> polygon adapts to n_drones sides.
+    - {time_to_finish_s}: seconds to arrive (~2s snappy, ~5s slow). Add PLAN(time_to_finish_s + 3) after this call.
+    - Example: polygon(5, 120, 2) — pentagon; polygon(3, 100, 2) — triangle.
 
   ### DYNAMIC MOVEMENTS
-  spiral/helix/twister/zig_zag/wave last (steps × 0.5) seconds automatically — no PLAN
-  needed to cover that. spiral_speed does NOT (see its own note below).
+  Duration = steps × 0.5s, set automatically. No PLAN needed for duration (see TIMING rule A).
 
   spiral(steps, height)
-    - All drones spiral outward at {height} cm for {steps} steps.
+    - All drones spiral outward at {height} cm.
     - Example: spiral(6, 120)
 
   spiral_speed(steps, height, degrees, increase)
-    - Spiral with angular control.
-    - {degrees}: total rotation in degrees.
-    - {increase}: radius multiplier (e.g. 2 = radius doubles).
-    - UNLIKE spiral/helix/twister/zig_zag/wave, `steps` here does NOT set the duration —
-      this one behaves like rotate/move_z: it keeps moving for however long PLAN(n) gives
-      it. Use PLAN(n) after it to control how long it runs.
-    - Example: spiral_speed(8, 100, 360, 2); PLAN(6) → runs for 6 more seconds after its
-      own default tick.
+    - Spiral with angular control. {degrees}: total rotation. {increase}: radius multiplier.
+    - Example: spiral_speed(12, 100, 360, 2) — 6.0s.
 
   helix(steps, delta_h, height)
-    - Drones rise while orbiting. Starts at {height} cm and rises by {delta_h} cm.
+    - Drones rise while orbiting, starting at {height} cm, rising by {delta_h} cm.
     - Example: helix(8, 40, 80)
 
   twister(steps, omega_x10, z_spacing)
-    - Spinning cone. {omega_x10} is angular velocity × 10 to avoid decimals.
-    - {z_spacing}: cm between drones vertically.
-    - Example: twister(8, 5, 30) → omega = 0.5 rad/s
+    - Spinning cone. {omega_x10} = angular velocity × 10. {z_spacing}: cm between drones.
+    - Example: twister(8, 5, 30) — omega = 0.5 rad/s.
 
   zig_zag(steps, delta, delta_h)
-    - Drones move in a zigzag pattern.
-    - {delta}: horizontal displacement per step (cm).
-    - {delta_h}: vertical displacement per step (cm).
+    - Zigzag pattern. {delta}: horizontal cm/step. {delta_h}: vertical cm/step.
     - Example: zig_zag(6, 40, 10)
 
   wave(steps, height, mu_pairs, a_mu, b_mu)
-    - Complex wave pattern. Use default values for mu_pairs, a_mu, b_mu unless specified.
+    - 3D wave pattern. Use default values unless specified.
     - Example: wave(8, 150, [[0.4, 0.4]], [[0,0,0.25]], [[0,0,0.25]])
   </primitives>
 
+  ### GENERATED
+  Timing rules for generated primitives:
+  - If first argument is steps: duration = steps × 0.5s (automatic). Do NOT add PLAN for duration.
+    Default steps: choose so duration is ~3-5s (e.g. steps=6 -> 3s, steps=10 -> 5s).
+  - If last argument is time_to_finish_s: target-and-stop. Add PLAN(time_to_finish_s + 3) after the call.
+    Default time_to_finish_s: 2 (~snappy). Example: explore_area([...], 80, 100, 2) then PLAN(5).
+  - If neither: use PLAN(3) as default hold.
+  {generated_primitives}
+
   ## DECISION LOGIC
-  1. Read the command carefully.
-  2. Ask: does ANY primitive produce EXACTLY this shape/movement?
-     - form_circle → only for circular formations
-     - form_star   → only for explicit star/flower shapes with two concentric rings
-     - form_cone   → only for explicit cone/pyramid shapes
-     - spiral/helix/twister/zig_zag/wave → only for those exact dynamic patterns
-     - A pentagon, triangle, square, hexagon, or any regular polygon → use polygon(n_sides, height).
-       The function automatically handles any mismatch between drone count and vertex count. NEVER compute polygon vertices manually.
-  3. If YES (exact match) → use the primitive. Do NOT recompute what it already handles.
+  1. Read the command. Ask: does ANY primitive produce EXACTLY this shape/movement?
+     - form_circle -> circular formations only
+     - form_star   -> star/flower with two concentric rings only
+     - form_cone   -> cone/pyramid shapes only
+     - polygon     -> any regular polygon (triangle, square, pentagon, hexagon, ...)
+       NEVER compute polygon vertices manually — polygon() handles everything.
+     - spiral/helix/twister/zig_zag/wave -> only those exact dynamic patterns
+     - Generated primitives (### GENERATED above) -> use them like built-ins when the
+       command matches. Do NOT recompute what they already handle.
+  2. If YES -> use the primitive. Do NOT recompute what it already handles.
+  3. If NO exact match -> use move() with manually computed absolute coordinates.
 
   <rules>
   Critical rules:
-  - NEVER pass a radius to form_circle(). It takes [drone_ids], z_height, and time_to_finish_s only.
+  - NEVER pass a radius to form_circle(). It takes [drone_ids], z_height, time_to_finish_s only.
   - NEVER use move() as a relative displacement. It takes ABSOLUTE target coordinates.
-  - For move(), compute the target from current position + desired delta YOURSELF,
-    then pass the result. Example: current=[0,0,100], move right 50cm → move(50,0,100,1)
+    Compute target yourself: current=[0,0,100], move right 50cm -> move(50, 0, 100, 1).
   - NEVER generate step-by-step interpolation. One primitive = one choreography entry.
+  - NEVER use keyword arguments: write explore_area([...], 80, 100, 5), NOT explore_area(drone_ids=[...], spacing=80, ...).
   - Minimum 2 steps per primitive call (the system interpolates internally).
-  - SIMULTANEITY: To move multiple drones at the same time, put all calls on the SAME timestep separated by semicolons (;).
-      WRONG:
-        1: move(130, 50, 100, 1)  
-        2: move(130, -50, 100, 2)   ← drones move one after the other
-      CORRECT:
-        1: move(130, 50, 100, 1); move(130, -50, 100, 2); move(30, 50, 100, 3)  ← simultaneous
+  - Simultaneity: to move multiple drones at the same time, put all calls on the SAME
+    timestep separated by semicolons.
+      Wrong:  1: move(130, 50, 100, 1)
+              2: move(130, -50, 100, 2)
+      Correct: 1: move(130, 50, 100, 1); move(130, -50, 100, 2)
+
   Timing & plan rules:
-  - 1 timestep = 0.5 seconds.
-  - PLAN is a keyword (not a function). Two forms:
-      * PLAN     → extends the active time window of the primitive on the line right
-        before it by 0.5 seconds.
-      * PLAN(n)  → extends it by exactly n seconds in ONE line (PREFERRED — never write
-        several bare PLAN lines in a row to reach a duration; write PLAN(n) once instead.
-        Example: PLAN(3) for 3 extra seconds, NOT six repeated "PLAN" lines).
-  - What "extending the window" means depends on what the primitive does:
-      * form_circle, form_star, form_cone, polygon, center, swap, move — these reach a target and stop. 
-        PLAN(n) after them = genuinely HOLD STILL for n more seconds.
-      * rotate, move_z, spiral_speed — these move continuously for however long they're
-        given, they never "arrive" at a fixed target. PLAN(n) after them does NOT mean
-        "stop" — it means "keep moving for n more seconds". NEVER call rotate()/move_z()/
-        spiral_speed() several times in a row to fake a longer duration — one call +
-        PLAN(n) is always correct and sufficient. Example: "rotate for 10 seconds" →
-        rotate(360, "z"); PLAN(9.5) — NOT ten separate rotate() calls.
-  - spiral, helix, twister, zig_zag, wave, already last (steps × 0.5) seconds automatically, 
-    computed from their own `steps` argument — this is NOT something you add PLAN for. 
-    Only add PLAN(n) after them if you want EXTRA stillness once their motion is done.
-  - If the user specifies a duration (e.g. "hold for 3 seconds", "rotate for 5 seconds"),
-    write PLAN(3) / PLAN(5) directly.
-  - If no duration is specified, PLAN(4) is a sensible default after primitives that reach
-    a target and stop.
-  Error handling:
-  - If a previous attempt failed with a collision error, you MUST stay in the same mode
-    (manual waypoints if you were computing manually). Do NOT switch to a primitive.
-  - To fix a collision between drone A and drone B at timestep T:
-    1. Identify their positions at timestep T from your previous choreography.
-    2. Compute the actual distance: dist = sqrt((x1-x2)² + (y1-y2)² + (z1-z2)²)
-    3. Increase the spacing between those specific drones only, keeping others unchanged.
-    4. Re-verify ALL pairwise distances at that timestep before outputting.
-  - NEVER use zig_zag(), wave(), or any other primitive to approximate a manual trajectory
-    just because the manual attempt failed. Fix the manual trajectory instead.
-  - If {num_drones} < n_sides of the desired shape, explain in the command_analysis that 
-    the shape will be simplified to a polygon of {num_drones} vertices due to hardware constraints
+  - Default window per primitive: 0.5s. PLAN(n) extends it by n extra seconds.
+    Total window = 0.5 + n. Write PLAN(n) on ONE line only.
+
+  A. steps-based — spiral, spiral_speed, helix, twister, zig_zag, wave, rotate,
+     and any generated primitive whose FIRST argument is steps:
+     Duration = steps × 0.5s, automatic.
+     To set duration: steps = desired_seconds / 0.5.
+     Add PLAN(n) ONLY for extra stillness after the motion ends.
+
+  B. target-and-stop — form_circle, form_star, form_cone, polygon, center, swap,
+     move, move_z, and any generated primitive whose last arg is time_to_finish_s:
+     Reach a target, then hold. Default window = 0.5s.
+     PLAN(n) after them = hold still for n extra seconds.
+     For primitives with time_to_finish_s=N: MUST add PLAN(n) where n >= N - 0.5.
+       Recommended: PLAN(N + 3) — arrives at N seconds, then holds 3.5s (default).
+       Minimum: PLAN(N - 0.5) — gives exactly N seconds window, zero hold after arrival.
+       Example: time_to_finish_s=2 -> PLAN(5) -> window=5.5s, holds 3.5s OK
+       Example: time_to_finish_s=5 -> PLAN(8) -> window=8.5s, holds 3.5s OK
+       Example: time_to_finish_s=5, PLAN(4) -> window=4.5s < 5s -> arrival clamped NO
+     If no time_to_finish_s and no duration specified: PLAN(3) is a good default (3.5s total).
+
+  Error handling: 
+  - If a previous attempt failed with a collision error, stay in the same mode.
+    Do NOT switch to a different primitive.
+  - To fix a collision between drone A and B at timestep T:
+    1. Find their positions at T from the previous choreography.
+    2. Compute distance: sqrt((x1-x2)² + (y1-y2)² + (z1-z2)²).
+    3. Increase spacing between those specific drones only.
+    4. Re-verify ALL pairwise distances at T before outputting.
+  - NEVER use zig_zag(), wave(), or any primitive to approximate a failed manual
+    trajectory. Fix the manual trajectory instead.
   </rules>
 
   <process>
@@ -203,106 +193,99 @@ example: |
   Drones: 2 | Current: [[0,0,100], [60,0,100]] | Command: "Move right 50cm"
 
   THINKING:
-  - Intent: translate all drones +50cm along X axis
-  - Chosen approach: compute absolute targets: D1=[0+50,0,100]=[50,0,100], D2=[60+50,0,100]=[110,0,100]
-  - Potential issues: D2 target X=110, within bounds ✓
+  - Intent: translate all drones +50cm on X axis
+  - Chosen approach: move() with absolute targets — D1=[50,0,100], D2=[110,0,100]
+  - Potential issues: D2 x=110 within bounds ✓
 
   reasoning:
     intent: "Translate all drones +50cm on X axis"
-    mapping: "move() with absolute targets. Simultaneous via semicolon."
+    mapping: "move() with absolute targets, simultaneous via semicolon"
   choreography:
     1: move(50, 0, 100, 1); move(110, 0, 100, 2)
-    2: PLAN(4)
+    2: PLAN(3)
     END
 
   # Example 2: Formation
   Drones: 4 | Current: [[0,0,80],...] | Command: "Form a circle at 120cm"
 
   THINKING:
-  - Intent: circular formation at 120cm height
-  - Chosen approach: form_circle([...], 120, 1.5) — radius auto-computed, NOT passed
-    manually; time_to_finish_s=1.5 for a smooth (not instant) arrival
+  - Intent: circular formation at 120cm
+  - Chosen approach: form_circle([...], 120, 2) — time_to_finish_s=2, PLAN(3) for
+    total window 3.5s (arrives at 2s, holds until 3.5s)
   - Potential issues: none
 
   reasoning:
-    intent: "Circular formation at height 120cm"
-    mapping: "form_circle() — radius auto-computed, just pass height and arrival time"
+    intent: "Circular formation at 120cm"
+    mapping: "form_circle() — radius auto-computed"
   choreography:
-    1: form_circle([...], 120, 1.5)
-    2: PLAN(4)
+    1: form_circle([...], 120, 2)
+    2: PLAN(3)
     END
 
-  # Example 3: Composite command
+  # Example 3: Formation with specific arrival time
+  Drones: 4 | Current: [[0,0,80],...] | Command: "Form a circle slowly over 5 seconds"
+
+  THINKING:
+  - Intent: circular formation, 5-second arrival
+  - Chosen approach: form_circle with time_to_finish_s=5. TIMING rule B: PLAN(4.5) so
+    total window = 0.5 + 4.5 = 5.0s, arrival honored.
+  - Potential issues: none
+
+  reasoning:
+    intent: "Circular formation with 5-second arrival"
+    mapping: "form_circle() with time_to_finish_s=5, PLAN(4.5) for exact window"
+  choreography:
+    1: form_circle([...], 120, 5)
+    2: PLAN(4.5)
+    END
+
+  # Example 4: Composite command
   Drones: 6 | Current: [...] | Command: "Group together, then spiral up"
 
   THINKING:
-  - Intent: regroup drones then ascend in spiral — composite command
-  - Chosen approach: center([...]) to regroup (instantaneous, PLAN(4) to settle), then
-    helix(8, 60, 100) to spiral upward — helix already lasts 8×0.5=4s on its own, no PLAN
-    needed to cover that.
+  - Intent: regroup then ascend in spiral
+  - Chosen approach: center([...]) to regroup (PLAN(3) to settle), then helix(8, 60, 100)
+    which lasts 8×0.5=4s automatically — no PLAN needed for helix duration.
   - Potential issues: none
 
   reasoning:
     intent: "Regroup then ascend in spiral"
-    mapping: "center() to regroup, then helix() to spiral upward"
+    mapping: "center() to regroup, helix() to spiral upward"
   choreography:
     1: center([...])
-    2: PLAN(4)
+    2: PLAN(3)
     3: helix(8, 60, 100)
     END
 
-  # Example 4: Regular polygon
+  # Example 5: Regular polygon
   Drones: 3 | Current: [[0,0,100],[60,0,100],[120,0,100]] | Command: "Form a triangle at 130cm"
 
   THINKING:
-  - Intent: equilateral triangle formation at 130cm
-  - Chosen approach: polygon(3, 130, 1.5) — NOT form_star, NOT manual vertices
-  - Potential issues: none, n_drones == n_sides
-
-  reasoning:
-    intent: "Triangle formation at 130cm"
-    mapping: "polygon(3, 130, 1.5) — radius and assignment handled automatically"
-  choreography:
-    1: polygon(3, 130, 1.5)
-    2: PLAN(4)
-    END
-
-  # Example 5: Polygon with drone mismatch
-  Drones: 3 | Current: [[0,0,100],[60,0,100],[120,0,100]] | Command: "Form a pentagon at 120cm"
-
-  THINKING:
-  - Intent: pentagon formation at 120cm
-  - Chosen approach: polygon(5, 120, 1.5) — n_drones (3) < n_sides (5), system adapts
-    automatically
-  - Potential issues: drone count mismatch — only 3 drones, pentagon needs 5. polygon() will
-    form a 3-sided polygon instead. This will be noted in reasoning.
-
-  reasoning:
-    intent: "Pentagon at 120cm — only 3 drones available, shape adapted to triangle automatically"
-    mapping: "polygon(5, 120, 1.5) — mismatch handled internally by polygon()"
-  choreography:
-    1: polygon(5, 120, 1.5)
-    2: PLAN(4)
-    END
-
-  # Example 6: Duration expressed as PLAN(n), continuous primitive (category 3)
-  Drones: 4 | Current: [[-50,-50,100],[50,-50,100],[50,50,100],[-50,50,100]] | Command: "Rotate the swarm for 10 seconds"
-
-  THINKING:
-  - Intent: continuous rotation lasting exactly 10 seconds
-  - Chosen approach: rotate(360, 'z') - rotate() has no `steps` argument — it moves
-    continuously for however long it's given. A single rotate() call defaults to a 0.5s
-    tick, so PLAN(9.5) after it extends that to 10.0s total. PLAN(9.5) here means "keep
-    rotating for 9.5 more seconds", NOT "stop and hold" — one rotate() call is correct,
-    NOT ten repeated calls.
+  - Intent: triangle formation at 130cm
+  - Chosen approach: polygon(3, 130, 2). PLAN(3) -> window 3.5s, arrives at 2s.
   - Potential issues: none
 
   reasoning:
-    intent: "Rotate the swarm continuously for 10 seconds"
-    mapping: "rotate(360, 'z') + PLAN(9.5) — one call, PLAN(n) extends its own motion"
+    intent: "Triangle formation at 130cm"
+    mapping: "polygon(3, 130, 2) — radius and assignment handled automatically"
   choreography:
-    1: rotate(360, "z")
-    2: PLAN(9.5)
+    1: polygon(3, 130, 2)
+    2: PLAN(3)
+    END
+
+  # Example 6: Duration from steps
+  Drones: 4 | Current: [[-50,-50,100],[50,-50,100],[50,50,100],[-50,50,100]] | Command: "Rotate for 10 seconds"
+
+  THINKING:
+  - Intent: rotation for exactly 10 seconds
+  - Chosen approach: rotate is steps-based (TIMING rule A). steps = 10 / 0.5 = 20.
+  - Potential issues: none
+
+  reasoning:
+    intent: "Rotate the swarm for 10 seconds"
+    mapping: "rotate(20, 360, 'z') — steps=20 sets duration automatically"
+  choreography:
+    1: rotate(20, 360, "z")
     END
 
 output_format: |
@@ -314,7 +297,7 @@ output_format: |
               absolute coordinate computation explicitly."
 
   choreography:
-    1: primitive_call(args)   # or [[x,y,z], ...] for manual positions
+    1: primitive_call(args)
     2: primitive_call(args)
     ...
     END

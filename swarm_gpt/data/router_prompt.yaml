@@ -12,12 +12,13 @@ user_initial: >
 
   # Response structure
   First, decide whether the command describes one action or several distinct
-  actions (e.g. "form a circle and then explore the area" is two). For each
-  action, reason briefly about which primitive above actually matches its
-  requested shape or motion — shared generic wording like "arrange", "form",
-  or "shape" is not evidence of a match by itself, only the primitive's own
-  described behavior is. If none of the primitives cover an action, its
-  primitive is null.
+  actions (e.g. "form a circle and then explore the area" is two). Modifiers
+  like "at height 100" or "at speed 2" are parameters, not separate actions —
+  fold them into the main action. For each action, reason briefly about which
+  primitive above actually matches its requested shape or motion — shared generic
+  wording like "arrange", "form", or "shape" is not evidence of a match by
+  itself, only the primitive's own described behavior is. If none of the
+  primitives cover an action, its primitive is null.
 
 example: >
   # Example

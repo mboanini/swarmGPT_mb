@@ -12,7 +12,7 @@ _ERROR_PATTERN = re.compile(r"(.*?):(\d+):(\d+): (E\w+): (.*?) \((.*?)\)")
 _PREAMBLE = (
     "import numpy as np\n"
     "from numpy.typing import NDArray\n"
-    "from swarm_gpt.core.motion_primitives import _sanitize_drone_ids, _assign_positions, _form_grid\n"
+    "from swarm_gpt.core.motion_primitives import _sanitize_drone_ids, _assign_positions, _form_grid, _formation_arrival_time, _formation_waypoints\n"
 )
 
 

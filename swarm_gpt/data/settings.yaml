@@ -23,9 +23,8 @@ axswarm:
   input_smoothness_weight: 10.0  # Weight of the input smoothness objective in the cost
   input_continuity_weight: 1.0  # Weight of the input continuity objective in the cost
 
-  # Limits. TODO: Reset back to 2, 2, 2
-  pos_min: [-3, -3, 0.1]  # Minimum position of the AMSwarm drones
-  pos_max: [3, 3, 2]  # Maximum position of the AMSwarm drones
+  pos_min: [-2.0, -2.0, 0.25]  # Minimum position of the AMSwarm drones
+  pos_max: [2.0, 2.0, 1.7]  # Maximum position of the AMSwarm drones
   vel_max: 1.73  # Maximum velocity of the AMSwarm drones
   acc_max: 1.0  # Maximum force of the AMSwarm drones (0.75 gs)
   collision_envelope: [0.15, 0.15, 0.15]  # Collision envelope width in x, y, z

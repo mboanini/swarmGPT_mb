@@ -13,7 +13,7 @@ from swarm_gpt.exception import LLMFormatError
 
 motion_primitives = {
     "move": {"n_args": 4},
-    "rotate": {"n_args": 2},
+    "rotate": {"n_args": 3},
     "center": {"n_args": 1},
     "swap": {"n_args": 2},
     "move_z": {"n_args": 2},
@@ -28,6 +28,9 @@ motion_primitives = {
     "form_star": {"n_args": 4},
     "form_cone": {"n_args": 4},
     "polygon": {"n_args": 3},
+    "cluster_split": {"n_args": 3},
+    "split_two_groups": {"n_args": 4},
+    "form_bridge": {"n_args": 2},
 }
 
 
@@ -44,16 +47,16 @@ def primitive_by_name(
 
 
 def rotate(
-    params: tuple[int, str],
+    params: tuple[int, int, str],
     swarm_pos: NDArray,
     tstart: float,
     tend: float,
     limits: dict[str, NDArray],
 ) -> tuple[NDArray, dict[float, dict[int, NDArray]]]:
     """Rotate all drones by angle theta."""
-    angle, axis = params
+    steps, angle, axis = params
+    steps = max(1, int(steps))
     angle = np.deg2rad(float(angle))
-    steps = int((tend - tstart) / 0.5)  # Number of steps to rotate, one per 0.5s tick
     # override rotation to be around z axis atm
     if "z" in axis:
         axis = np.array([0, 0, 1])
@@ -125,9 +128,9 @@ def spiral_speed(
 ) -> tuple[NDArray, dict[float, dict[int, NDArray]]]:
     """Spiral primitive with speed control."""
     steps, height, degrees, increase = params
+    steps = max(1, int(steps))
     n_drones = swarm_pos.shape[0]
     min_spacing = 60  # Minimum distance between drones in cm
-    steps = int((tend - tstart) / 0.5)  # one sub-waypoint per 0.5s tick
 
     # Calculate the circumference needed to place all drones with at least the minimum spacing
     start_radius = min_spacing / (2 * np.sin(np.pi / n_drones))
@@ -747,3 +750,186 @@ def _formation_waypoints(
         waypoints[tend] = {d: p.copy() for d, p in zip(ids, target_pos)}
     return waypoints
 
+
+# n_args: 3
+def cluster_split(params, swarm_pos, tstart, tend, limits):
+    '''
+    Description: Divides all drones into three separate clusters arranged in a triangular pattern at a fixed height of 100 cm, ensuring even distribution of drones in each cluster.
+
+    params: tuple[list[int], float, float] — (drone_ids, base_distance, time_to_finish_s)
+        drone_ids: list[int] — IDs of drones to split into clusters.
+        base_distance: float — Controls the side length of the triangular pattern.
+        time_to_finish_s: float — Time to complete the cluster formation and hold positions.
+        
+    swarm_pos: NDArray (n_drones, 3) — current positions in cm
+    tstart: float — start of time window (exclusive)
+    tend: float — end of time window (inclusive)
+    limits: dict — lower and upper spatial bounds in metres
+    
+    return:
+        tuple[NDArray, dict[float, dict[int, NDArray]]]
+    '''
+    drone_ids, base_distance, time_to_finish_s = params
+    drone_ids = _sanitize_drone_ids(drone_ids, swarm_pos.shape[0])
+    
+    n_drones = len(drone_ids)
+    
+    # Define the cluster positions in an equilateral triangle formation
+    height_z = 100.0  # cm
+    # Triangular positions given base_distance
+    triangle_offsets = np.array([
+        [0, 0, height_z],  # First cluster at origin
+        [base_distance, 0, height_z],  # Second cluster on the x-axis
+        [base_distance / 2, (np.sqrt(3) / 2) * base_distance, height_z]  # Third cluster forming an equilateral
+    ])
+    
+    # Calculate the number of drones per cluster ensuring an even distribution
+    drones_per_cluster = [n_drones // 3] * 3
+    for i in range(n_drones % 3):
+        drones_per_cluster[i] += 1
+    
+    des_pos = np.zeros((n_drones, 3), dtype=np.float64)
+    
+    # Assign drones to the centroids with equispaced distribution within each cluster
+    start_idx = 0
+    for offset, count in zip(triangle_offsets, drones_per_cluster):
+        cluster_drones = drone_ids[start_idx:start_idx + count]
+        x_positions = np.linspace(-base_distance / 3, base_distance / 3, count)
+        y_positions = np.linspace(-base_distance / 3, base_distance / 3, count)
+        cluster_positions = np.array(np.meshgrid(x_positions, y_positions, [height_z])).T.reshape(-1, 3)[:count]
+        des_pos[cluster_drones] = cluster_positions + offset
+        start_idx += count
+        
+    # Clamp positions to within limits
+    des_pos = np.clip(des_pos, limits["lower"] * 100, limits["upper"] * 100)
+    
+    # Get the assigned positions for all drones
+    assignment = _assign_positions(swarm_pos[drone_ids], des_pos[drone_ids])
+    target_positions = des_pos[drone_ids][assignment]
+    
+    waypoints = _formation_waypoints(target_positions, swarm_pos[drone_ids], tstart, tend, time_to_finish_s, drone_ids=drone_ids)
+    
+    # Prepare the final positions of all drones
+    final_pos = swarm_pos.copy()
+    final_pos[drone_ids] = target_positions
+    
+    return final_pos, waypoints
+
+
+# n_args: 4
+def split_two_groups(params, swarm_pos, tstart, tend, limits):
+    '''
+    Description: Divide all drones into two evenly sized clusters, arranged symmetrically
+                 at a specified height. Each group will form a separate point equidistant
+                 from the center point of the swarm, ensuring uniform distribution.
+
+    params: tuple[list[int], int, float, float] — (drone_ids, z_coord, group_distance, time_to_finish_s)
+        drone_ids: list[int] — IDs of drones to participate in forming the groups
+        z_coord: int — height in cm at which the clusters are to be arranged
+        group_distance: float — horizontal distance between the two groups in cm
+        time_to_finish_s: float — time in seconds to complete the formation and hold
+    swarm_pos: NDArray (n_drones, 3) — current positions in cm
+    tstart: float — start of time window (exclusive)
+    tend: float — end of time window (inclusive)
+    limits: dict — lower and upper spatial bounds in metres
+    return:
+        tuple[NDArray, dict[float, dict[int, NDArray]]]
+    '''
+    # Unpack params
+    drone_ids, z_coord, group_distance, time_to_finish_s = params
+    drone_ids = _sanitize_drone_ids(drone_ids, swarm_pos.shape[0])
+    n_drones = len(drone_ids)
+
+    # Calculate the centroid of the specified drones
+    centroid = np.mean(swarm_pos[drone_ids, :2], axis=0)
+
+    # Calculate the direction and final positions for the two groups
+    half_distance = group_distance / 2
+    direction = np.array([1, 0])  # Target direction, e.g., on x-axis for separation
+    group_offsets = [-half_distance, half_distance]
+
+    # Calculate target positions for each drone
+    des_pos = np.zeros((n_drones, 3), dtype=np.float64)
+    target_positions = []
+
+    for i in range(n_drones):
+        group_idx = i % 2
+        offset_dir = direction * group_offsets[group_idx]
+        # To avoid conflicts and ensure drones in the same group do not overlap,
+        # we introduce a small offset based on the drone's index.
+        # This offset also introduces a gap with drones in the same group.
+        individual_offset = ((i // 2) + 0.5) * 40  # Making sure no two drones are too close
+        offset_dir += np.array([0, individual_offset]) if group_idx == 0 else np.array([0, -individual_offset]) 
+        target = centroid + offset_dir
+        target_positions.append([target[0], target[1], z_coord])
+
+    des_pos[:, :3] = target_positions
+
+    # Assign positions and clip to limits
+    assignment = _assign_positions(swarm_pos[drone_ids], des_pos)
+    target = des_pos[assignment]
+    target = np.clip(target, limits["lower"] * 100, limits["upper"] * 100)
+
+    waypoints = _formation_waypoints(
+        target, swarm_pos[drone_ids], tstart, tend, time_to_finish_s, drone_ids=drone_ids
+    )
+
+    pos = swarm_pos.copy()
+    pos[drone_ids] = target
+
+    return pos, waypoints
+
+
+# n_args: 2
+def form_bridge(params, swarm_pos, tstart, tend, limits):
+    '''
+    Description: Arrange drones in a linear formation to simulate a bridge between two specified points at a height of 100 cm.
+
+    params: tuple[list[int], float] — (drone_ids, time_to_finish_s)
+        drone_ids: list[int] — IDs of drones to form the bridge. If [ellipsis], represents all drones.
+        time_to_finish_s: float — duration for which the drones maintain the formation after reaching positions.
+
+    swarm_pos: NDArray (n_drones, 3) — current positions in cm.
+    tstart: float — start of time window (exclusive).
+    tend: float — end of time window (inclusive).
+    limits: dict — lower and upper spatial bounds in metres.
+    
+    return: tuple[NDArray, dict[float, dict[int, NDArray]]]
+    '''
+    drone_ids, time_to_finish_s = params
+    drone_ids = _sanitize_drone_ids(drone_ids, swarm_pos.shape[0])
+    n_drones = len(drone_ids)
+
+    # Extracting limit bounds and converting them to cm
+    x_lower, y_lower, z_lower = limits["lower"] * 100
+    x_upper, y_upper, z_upper = limits["upper"] * 100
+    
+    z_coord = 100  # Bridge height in cm
+
+    # Defining the start and endpoints of the bridge in x, y coordinates
+    bridge_start = np.array([x_lower, 0, z_coord])
+    bridge_end = np.array([x_upper, 0, z_coord])
+
+    # Calculate positions for the drones to form a linear bridge
+    bridge_direction = bridge_end - bridge_start
+    spacing = max(60, np.linalg.norm(bridge_direction) / (n_drones - 1))
+    positions = [bridge_start + i * (spacing * bridge_direction / np.linalg.norm(bridge_direction))
+                 for i in range(n_drones)]
+
+    # Clip positions to respect spatial limits
+    positions_clipped = np.clip(positions, [x_lower, y_lower, z_lower+1], [x_upper, y_upper, z_upper])
+
+    # Make sure the final desired positions are consistent with all drones
+    des_pos = swarm_pos.copy()
+    des_pos[drone_ids] = positions_clipped
+
+    # Assign positions ensuring no collisions
+    assignment = _assign_positions(swarm_pos[drone_ids], positions_clipped)
+    target = positions_clipped[assignment]
+
+    # Create waypoints for the formation transition
+    waypoints = _formation_waypoints(
+        target, swarm_pos[drone_ids], tstart, tend, time_to_finish_s, drone_ids=drone_ids
+    )
+
+    return des_pos, waypoints

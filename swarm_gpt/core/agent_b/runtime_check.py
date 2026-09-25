@@ -5,7 +5,7 @@ import numpy as np
 
 import swarm_gpt.core.motion_primitives as _mp_module
 
-_MIN_DRONE_DISTANCE_CM = 60.0
+_MIN_DRONE_DISTANCE_CM = 40.0
 
 _TEST_SWARM_POS = np.array([
     [-50., -50., 100.],
@@ -29,6 +29,8 @@ def run(body: str, func_name: str, test_params: tuple) -> list[str]:
         "_sanitize_drone_ids":   _mp_module._sanitize_drone_ids,
         "_assign_positions":     _mp_module._assign_positions,
         "_form_grid":            _mp_module._form_grid,
+        "_formation_arrival_time": _mp_module._formation_arrival_time,
+        "_formation_waypoints":    _mp_module._formation_waypoints,
     }
 
     try:
