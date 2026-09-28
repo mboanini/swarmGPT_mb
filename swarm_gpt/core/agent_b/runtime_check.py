@@ -84,9 +84,16 @@ def run(body: str, func_name: str, test_params: tuple) -> list[str]:
                     for j in range(i + 1, len(ids)):
                         dist = np.linalg.norm(valid_positions[ids[i]] - valid_positions[ids[j]])
                         if dist < _MIN_DRONE_DISTANCE_CM:
-                            errors.append(
-                                f"waypoints[{t}]: drones {ids[i]} and {ids[j]} are too close "
-                                f"({dist:.1f} cm < {_MIN_DRONE_DISTANCE_CM} cm)"
-                            )
+                            if dist == 0.0:
+                                errors.append(
+                                    f"waypoints[{t}]: drones {ids[i]} and {ids[j]} are assigned "
+                                    f"the exact same position — two rows in des_pos are identical. "
+                                    f"Ensure every entry in des_pos is unique."
+                                )
+                            else:
+                                errors.append(
+                                    f"waypoints[{t}]: drones {ids[i]} and {ids[j]} are too close "
+                                    f"({dist:.1f} cm < {_MIN_DRONE_DISTANCE_CM} cm)"
+                                )
 
     return errors

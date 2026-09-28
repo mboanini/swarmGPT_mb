@@ -1,6 +1,8 @@
 import ast
 import re
 
+_SHADOWED_NAMES = {"_sanitize_drone_ids", "_assign_positions", "_form_grid"}
+
 
 def parse_text(text: str, lang: str = "python") -> str:
     """Extract the first code block of the given language from a markdown response.
@@ -36,7 +38,6 @@ class FunctionParser:
         if not func_nodes:
             raise ValueError("No function definition found in the code.")
 
-        # Multiple functions are allowed (e.g. helpers + main); use the last one as _func_name
         self._func_name = func_nodes[-1].name
 
         match = re.search(r"#\s*n_args:\s*(\d+)", self._code)
@@ -49,6 +50,49 @@ class FunctionParser:
             raise ValueError(
                 f"Function '{expected}' not found in code. Found: {all_names}"
             )
+
+    def check_n_args(self) -> None:
+        """Verify the declared `# n_args: N` matches the actual arity of `params`.
+
+        Finds the `<names> = params` destructuring assignment via ast and counts the 
+        names on its left-hand side, rather than
+        trusting N as self-reported by the LLM. Raises ValueError on any mismatch,
+        including when no proper tuple-destructuring assignment is found at all (e.g.
+        `x = params` or `x = params[0]`, which are themselves implementation bugs).
+        """
+        tree = ast.parse(self._code)
+        unpacks = [
+            n.targets[0]
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Assign)
+            and isinstance(n.value, ast.Name) and n.value.id == "params"
+            and isinstance(n.targets[0], ast.Tuple)
+        ]
+        if not unpacks:
+            raise ValueError(
+                "No `name1, name2, ... = params` destructuring assignment found — "
+                "params must be unpacked with one tuple-destructuring line."
+            )
+        actual = len(unpacks[0].elts)
+        if actual != self._n_args:
+            raise ValueError(
+                f"# n_args: {self._n_args} does not match the actual params arity "
+                f"({actual} name(s) unpacked from params)."
+            )
+
+    def strip_shadowed_helpers(self) -> None:
+        """Remove top-level redefinitions of module-level helpers that are already
+        injected into every primitive's scope. Keeps any other helper functions."""
+        tree = ast.parse(self._code)
+        lines = self._code.splitlines()
+        to_remove = [
+            (n.lineno - 1, n.end_lineno)
+            for n in tree.body
+            if isinstance(n, ast.FunctionDef) and n.name in _SHADOWED_NAMES
+        ]
+        for start, end in reversed(to_remove):
+            lines[start:end] = []
+        self._code = "\n".join(lines).strip()
 
     @property
     def function_name(self) -> str:

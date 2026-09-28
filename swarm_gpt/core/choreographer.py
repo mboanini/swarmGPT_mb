@@ -29,20 +29,27 @@ if TYPE_CHECKING:
 # client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # moved to swarm_gpt/core/_llm_client.py
 logger = logging.getLogger(__name__)
 
-# Primitives whose first argument is a `steps` count that is genuinely used to compute
-# `dt = (tend - tstart) / steps` and therefore intrinsically determines how long they last
-# (steps * STEP_DURATION seconds) — independent of PLAN. `spiral_speed` also takes a `steps`
-# argument but silently discards it (motion_primitives.py overwrites it from the window size),
-# so it is deliberately NOT included here: it behaves like `rotate`/`move_z` instead, filling
-# whatever window PLAN(n) gives it.
-EXPLICIT_STEPS_PRIMITIVES = {"spiral", "helix", "twister", "zig_zag", "wave"}
 STEP_DURATION = 0.5  # seconds per default tick, and the unit PLAN(n) counts in
 
 
-# Investigate and improve error message for the case when func = "", and we get key error, during sanitize llm output
-# Also improve error message when there is an issue with function output, so that we can re-prompt with super specific messag
-# Need to imorove parsing
-# Add a log everytime some waypoint is clamped.
+def _is_steps_based(fn_name: str) -> bool:
+    """True if the primitive's first param is `steps` (steps × STEP_DURATION = duration)."""
+    import inspect as _inspect
+    import swarm_gpt.core.motion_primitives as _mp
+    fn = getattr(_mp, fn_name, None)
+    if fn is None or not callable(fn):
+        return False
+    # Try source (file-based functions)
+    try:
+        src = _inspect.getsource(fn)
+        return bool(re.search(r'^\s+steps\s*,', src, re.MULTILINE))
+    except OSError:
+        pass
+    # Fallback: docstring (exec-injected generated primitives)
+    doc = fn.__doc__ or ""
+    return bool(re.search(r'^\s+steps\s*:', doc, re.MULTILINE))
+
+
 class Choreographer:
     """The choreographer handles the interaction with the language model.
 
@@ -151,9 +158,9 @@ class Choreographer:
         msgs = []
         user_prompt = self._format_initial_user_prompt(user_command)
         msgs.append({"role": "system", "content": self.prompts["system_initial"]})
-        generated = self._load_generated_primitives_content()
-        if generated:
-            msgs.append({"role": "system", "content": generated})
+        # generated = self._load_generated_primitives_content()
+        # if generated:
+        #     msgs.append({"role": "system", "content": generated})
         msgs.append({"role": "user", "content": user_prompt})
         msgs.append({"role": "system", "content": self.prompts["example"]})
         msgs.append({"role": "system", "content": self.prompts["output_format"]})
@@ -237,6 +244,7 @@ class Choreographer:
             .replace("{starting_pos}", str(starting_pos))
             .replace("{max_speed}", str(int(max_speed_cm_s)))
             .replace("{max_dist_per_step}", str(int(max_speed_cm_s * 0.5)))
+            .replace("{generated_primitives}", self._load_generated_primitives_content())
         )
         return text.replace("{prompt}", user_command)
 
@@ -598,7 +606,7 @@ class Choreographer:
 
         Each entry's `tstart` is wherever the clock stands when it's processed. How far the
         clock then advances depends on the entry:
-          - Primitives in EXPLICIT_STEPS_PRIMITIVES intrinsically last `steps * STEP_DURATION`
+          - Steps-based primitives (first param is `steps`) intrinsically last `steps * STEP_DURATION`
             seconds, computed from their own first argument — independent of anything else.
           - Everything else defaults to a single STEP_DURATION tick.
         `PLAN`/`PLAN(n)` doesn't advance the clock on its own — it extends the `tend` of the
@@ -617,17 +625,17 @@ class Choreographer:
                 merged_motion_primitives[-1]["tend"] = running_t
                 continue
 
-            args_by_fn = {list(d.keys())[0]: list(d.values())[0] for d in motion_primitives[i]}
+            fn_args = [(list(d.keys())[0], list(d.values())[0]) for d in motion_primitives[i]]
             duration = max(
-                args[0] * STEP_DURATION if fn.lower() in EXPLICIT_STEPS_PRIMITIVES else STEP_DURATION
-                for fn, args in args_by_fn.items()
+                args[0] * STEP_DURATION if _is_steps_based(fn.lower()) else STEP_DURATION
+                for fn, args in fn_args
             )
             tstart = running_t
             running_t += duration
             merged_motion_primitives.append(
                 {
-                    "fn": fns,
-                    "args": list(args_by_fn.values()),
+                    "fn": [fn for fn, _ in fn_args],
+                    "args": [args for _, args in fn_args],
                     "key": i,
                     "tstart": tstart,
                     "tend": running_t,

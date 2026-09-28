@@ -1,18 +1,1 @@
-content: |2-
-    cluster_split(drone_ids, base_distance, time_to_finish_s)
-      - Divides all drones into three separate clusters arranged in a triangular pattern at a fixed height of 100 units, ensuring even distribution of drones in each cluster.
-      - {drone_ids}: IDs of drones to split into clusters.
-      - {base_distance}: Controls the side length of the triangular pattern.
-      - {time_to_finish_s}: Time to complete the cluster formation and hold positions.
-
-    split_two_groups(drone_ids, z_coord, group_distance, time_to_finish_s)
-      - Divides all drones into two evenly sized clusters, arranged symmetrically at a specified height; each group will form a separate point in space, ensuring uniform distribution between the two groups.
-      - {drone_ids}: IDs of drones to participate in forming the groups
-      - {z_coord}: height in cm at which the clusters are to be arranged
-      - {group_distance}: horizontal distance between the two groups in cm
-      - {time_to_finish_s}: time in seconds to complete the formation and hold
-
-    form_bridge(drone_ids, time_to_finish_s)
-      - Arranges drones in a linear formation simulating a bridge, connecting the start and end points (-100, -100) and (100, 100) at a specified height of 100; drones are evenly spaced along the bridge line.
-      - {drone_ids}: IDs of drones to form the bridge. If [ellipsis], represents all drones.
-      - {time_to_finish_s}: duration for which the drones maintain the formation after reaching positions.
+content: |-

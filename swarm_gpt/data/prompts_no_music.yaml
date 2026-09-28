@@ -49,9 +49,11 @@ user_initial: |
   center([drone_ids])
     - Moves {drone_ids} to a tight cluster at the swarm's current centroid.
     - Useful to regroup before a new formation.
+    - Always add PLAN(3) after this call.
 
   swap(drone_id_1, drone_id_2)
     - Swaps positions of two drones.
+    - Always add PLAN(3) after this call (or after the last swap if multiple).
 
   form_star(height, min_spacing, delta_radius, time_to_finish_s)
     - Arranges drones in a star/flower pattern at {height} cm.

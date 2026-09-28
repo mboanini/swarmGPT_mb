@@ -55,7 +55,7 @@ If `params`:
 - Always unpack params with one destructuring line: `drone_ids, p1, p2, ... = params`. Never use index access.
 - Call `_sanitize_drone_ids(drone_ids, swarm_pos.shape[0])` before using drone_ids as indices.
 - Use `_assign_positions` when assigning drones to new target positions.
-- Each drone must occupy a unique position at every timestep - two or more drones cannot be in the same position at the same timestep.
+- Every entry in `des_pos` must be unique — no two rows can share the same coordinates. If you build `des_pos` by concatenating multiple sub-arrays (segments, rings, layers…), ensure no coordinate appears in more than one sub-array.
 - Waypoint keys are the **0-based** drone indices returned by `_sanitize_drone_ids` (or `range(n_drones)` when all drones move).
 - **`final_pos` must be shape `(n_drones, 3)` and cover ALL drones.** If only a subset moves, start from `swarm_pos.copy()` and update only those rows.
 - All position arrays must be float64. Initialize from `swarm_pos.copy()` (already float64) or `np.zeros((n, 3), dtype=float)` — never integer dtype.
