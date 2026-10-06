@@ -1,5 +1,6 @@
 from enum import Enum
 
+from swarm_gpt.core.agent_b.primitive_contract import PrimitiveContract
 
 class State(Enum):
     NOT_STARTED = 0
@@ -15,6 +16,7 @@ class FunctionNode:
         self._definition   = ""    # Design output: signature + docstring + pass
         self._body         = ""    # Write output:  full implementation
         self._n_args = 0     # extracted from # n_args: N in definition
+        self._contract: PrimitiveContract | None = None
         self._state        = State.NOT_STARTED
 
     @property
@@ -54,6 +56,14 @@ class FunctionNode:
         self._n_args = value
 
     @property
+    def contract(self) -> PrimitiveContract | None:
+        return self._contract
+
+    @contract.setter
+    def contract(self, value: PrimitiveContract):
+        self._contract = value
+
+    @property
     def state(self):
         return self._state
 
@@ -72,4 +82,5 @@ class FunctionNode:
         self._definition = ""
         self._body       = ""
         self._n_args     = 0
+        self.contract    = None
         self._state      = State.NOT_STARTED

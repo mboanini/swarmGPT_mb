@@ -16,8 +16,7 @@ from swarm_gpt.core.agent_b.write_function import WriteFunction
 logger = logging.getLogger(__name__)
 
 _STAGING_DIR  = Path(__file__).resolve().parent / "staging"
-_MAX_ATTEMPTS = 3
-
+_MAX_REPAIRS = 3
 
 class Pipeline:
     def __init__(self, model: str = "gpt-4o"):
@@ -63,45 +62,58 @@ class Pipeline:
         self._reviewer.run()
 
         # --- Static Check loop (pylint + mechanical AST checks) ---
-        for attempt in range(1, _MAX_ATTEMPTS + 1):
+        for repair_count in range(_MAX_REPAIRS + 1):
             write_staging_file(staging_path, node.body)
             static_errors = grammar_check(staging_path) + mechanical_check(node.body, node.name)
             if not static_errors:
-                logger.info(f"StaticCheck OK (attempt {attempt})")
+                logger.info("Static certification passed after %d repair(s)", repair_count,)
                 break
-            logger.warning(f"StaticCheck attempt {attempt}: {len(static_errors)} error(s)")
-            for e in static_errors:
-                logger.warning(f"  {e}")
-            if attempt == _MAX_ATTEMPTS:
-                logger.error("StaticCheck: max attempts reached, proceeding with current code")
-                break
+            logger.warning("Static certification failed after %d repair(s): %d error(s)", repair_count, len(static_errors),)
+            for error in static_errors:
+                logger.warning(" %s", error)
+            if repair_count == _MAX_REPAIRS:
+                raise RuntimeError(
+                    f"Static certification failed for primitive "
+                    f"'{node.name}' after {_MAX_REPAIRS} repair attempts:\n"
+                    + "\n".join(f"- {error}" for error in static_errors)
+                )
+                # logger.error("StaticCheck: max attempts reached, proceeding with current code")
+                # break
             self._debugger.setup(node)
             self._debugger.set_errors(static_errors)
             self._debugger.run()
 
         # --- RuntimeCheck loop ---
         test_params = infer_test_params(node.definition)
-        if test_params is not None:
-            runtime_context = (
-                f"Description: {node.description}\n\n"
-                f"Interface:\n{node.definition}"
+        if test_params is None:
+            raise RuntimeError(
+                f"Runtime certification could not be performed for "
+                f"primitive '{node.name}': test parameter inference failed."
             )
-            for attempt in range(1, _MAX_ATTEMPTS + 1):
-                runtime_errors = runtime_check(node.body, node.name, test_params)
-                if not runtime_errors:
-                    logger.info(f"RuntimeCheck OK (attempt {attempt})")
-                    break
-                logger.warning(f"RuntimeCheck attempt {attempt}: {len(runtime_errors)} error(s)")
-                for e in runtime_errors:
-                    logger.warning(f"  {e}")
-                if attempt == _MAX_ATTEMPTS:
-                    logger.error("RuntimeCheck: max attempts reached, proceeding with current code")
-                    break
-                self._debugger.setup(node)
-                self._debugger.set_errors(runtime_errors, context=runtime_context)
-                self._debugger.run()
-        else:
-            logger.warning(f"RuntimeCheck skipped: infer_test_params failed for {name}")
+        # if test_params is not None:
+        runtime_context = (
+            f"Description: {node.description}\n\n"
+            f"Interface:\n{node.definition}"
+        )
+        for repair_count in range(_MAX_REPAIRS + 1):
+            runtime_errors = runtime_check(node.body, node.name, test_params)
+            if not runtime_errors:
+                logger.info("Runtime certification passed after %d repair(s)", repair_count,)
+                break
+            logger.warning("Runtime certification failed after %d repair(s): %d error(s)", repair_count, len(runtime_errors),)
+            for error in runtime_errors:
+                logger.warning("  %s", error)
+            if repair_count == _MAX_REPAIRS:
+                raise RuntimeError(
+                    f"Runtime certification failed for primitive "
+                    f"'{node.name}' after {_MAX_REPAIRS} repair attempts:\n"
+                    + "\n".join(f"- {error}" for error in runtime_errors)
+                )
+            self._debugger.setup(node)
+            self._debugger.set_errors(runtime_errors, context=runtime_context)
+            self._debugger.run()
+        # else:
+        #     logger.warning(f"RuntimeCheck skipped: infer_test_params failed for {name}")
 
         logger.info(f"Done: {name} (n_args={node.n_args})")
         return node
