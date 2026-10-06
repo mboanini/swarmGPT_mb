@@ -32,6 +32,34 @@ if TYPE_CHECKING:
     from swarm_gpt.utils import MusicManager
 
 
+def _pairwise_safety_metrics(
+    positions: np.ndarray,
+    collision_envelope: np.ndarray,
+) -> tuple[float, float, float]:
+    """Compute minimum pairwise safety metrics.
+
+    Args:
+        positions: Drone positions with shape (n_drones, 3).
+        collision_envelope: AxSwarm collision envelope [rx, ry, rz].
+
+    Returns:
+        min_euclidean: Minimum Euclidean inter-drone distance [m].
+        min_normalized: Minimum envelope-normalized distance. Safe boundary is 1.0.
+        h_min: Minimum barrier-like value h = d_normalized^2 - 1. Safe iff h >= 0.
+    """
+    n_drones = positions.shape[0]
+    if n_drones < 2:
+        return np.inf, np.inf, np.inf
+    relative_positions = positions[:, None, :] - positions[None, :, :]
+    euclidean = np.linalg.norm(relative_positions, axis=-1)
+    normalized = np.linalg.norm(relative_positions / collision_envelope, axis=-1)
+    off_diag = ~np.eye(n_drones, dtype=bool)
+    min_euclidean = float(euclidean[off_diag].min())
+    min_normalized = float(normalized[off_diag].min())
+    h_min = min_normalized**2 - 1
+    return min_euclidean, min_normalized, h_min
+
+
 def simulate_axswarm(
     waypoints: dict[str, NDArray], settings: dict, gui: bool = False
 ) -> dict[int, NDArray]:
@@ -47,9 +75,29 @@ def simulate_axswarm(
         A collection of data from the simulation.
     """
 
-    # Inizializzazione liste per il grafico di analisi
-    scostamenti_log = []
-    tempi_log = []
+    # =============================================================================
+    # THESIS INSTRUMENTATION - PHASE 1
+    # Observational logging only: compares AxSwarm's own prediction against the state actually
+    # produced by crazyflow. Does not change any ORIGINAL SWARMGPT BEHAVIOR below - pos/vel fed
+    # into the next solve() still come from solver_data.u_pos/u_vel, never from sim.data.states,
+    # exactly as in the original baseline.
+    # =============================================================================
+    prediction_times = []
+    predicted_next_pos_log = []
+    actual_pos_log = []
+    prediction_error_log = []
+    min_predicted_euclidean_one_step_log = []
+    min_actual_euclidean_log = []
+    min_predicted_normalized_one_step_log = []
+    min_actual_normalized_log = []
+    h_min_predicted_one_step_log = []  # worst margin predicted ONE MPC step ahead (data.pos[:,1])
+    h_min_actual_log = []
+    horizon_times_log = []
+    h_min_predicted_horizon_log = []  # worst margin anywhere in the full MPC horizon (data.pos)
+    # Prediction generated at the previous AxSwarm solve.
+    # data.pos[:, 1] predicts the state one AxSwarm period ahead.
+    pending_prediction = None
+    pending_prediction_time = None
 
     # Set up the simulation
     sim = Sim(
@@ -119,49 +167,180 @@ def simulate_axswarm(
         yield "progress", step + 1, n_steps
         t = step / sim.control_freq
         if step % solve_every_n_steps == 0:
+            # ---------------------------------------------------------
+            # PHASE 1: validate the prediction generated at the PREVIOUS AxSwarm solve against
+            # the current Crazyflow state. pending_prediction corresponds to data.pos[:, 1]
+            # predicted one MPC period ago. Reading-only: does not change pos/vel below.
+            # ---------------------------------------------------------
+            if pending_prediction is not None:
+                time_error = abs(t - pending_prediction_time)
+                if time_error > 1e-6:
+                    logger.warning(
+                        f"[PHASE1] Prediction timing mismatch: "
+                        f"expected={pending_prediction_time:.6f}s, actual={t:.6f}s"
+                    )
+                actual_pos = np.asarray(sim.data.states.pos[0]).copy()
+                prediction_error = np.linalg.norm(actual_pos - pending_prediction, axis=-1)
+                min_actual_euclidean, min_actual_normalized, h_min_actual = (
+                    _pairwise_safety_metrics(
+                        actual_pos, np.asarray(solver_settings.collision_envelope)
+                    )
+                )
+                (
+                    min_predicted_euclidean_one_step,
+                    min_predicted_normalized_one_step,
+                    h_min_predicted_one_step,
+                ) = _pairwise_safety_metrics(
+                    pending_prediction, np.asarray(solver_settings.collision_envelope)
+                )
+
+                prediction_times.append(t)
+                predicted_next_pos_log.append(pending_prediction)
+                actual_pos_log.append(actual_pos)
+                prediction_error_log.append(prediction_error)
+                min_predicted_euclidean_one_step_log.append(min_predicted_euclidean_one_step)
+                min_actual_euclidean_log.append(min_actual_euclidean)
+                min_predicted_normalized_one_step_log.append(min_predicted_normalized_one_step)
+                min_actual_normalized_log.append(min_actual_normalized)
+                h_min_predicted_one_step_log.append(h_min_predicted_one_step)
+                h_min_actual_log.append(h_min_actual)
+
+                if len(prediction_times) % 20 == 1:
+                    print(
+                        f"[PHASE1] t={t:.3f}s | mean prediction error="
+                        f"{np.mean(prediction_error):.4f} m | "
+                        f"max error={np.max(prediction_error):.4f} m | "
+                        f"h_pred_1step={h_min_predicted_one_step:.4f} | h_actual={h_min_actual:.4f}"
+                    )
+
             state = np.concat((pos, vel), axis=-1)
             t_solve = time.perf_counter()
+
+            # PHASE 1 diagnostic:
+            # AxSwarm computes its collision-activation distances from the
+            # trajectories stored BEFORE the current solve.
+            pre_solve_pos = np.asarray(solver_data.pos).copy()
+
+            pre_solve_min_normalized = np.full(
+                (sim.n_drones, sim.n_drones),
+                np.inf,
+            )
+
+            collision_envelope = np.asarray(solver_settings.collision_envelope)
+
+            for i in range(sim.n_drones):
+                for j in range(i + 1, sim.n_drones):
+                    relative_positions = pre_solve_pos[i] - pre_solve_pos[j]
+
+                    normalized_distances = np.linalg.norm(
+                        relative_positions / collision_envelope,
+                        axis=-1,
+                    )
+
+                    min_normalized = float(np.min(normalized_distances))
+
+                    pre_solve_min_normalized[i, j] = min_normalized
+                    pre_solve_min_normalized[j, i] = min_normalized
+
             success, _, solver_data = solve(state, t, solver_data, solver_settings)
             jax.block_until_ready(solver_data)
             solve_times.append(time.perf_counter() - t_solve)
 
-            # --- LOGICA DI CONFRONTO NOMINALE VS SICURO ---
-            # 1. Trova il punto ideale nei waypoint originali
-            idx_t = np.argmin(np.abs(waypoints["time"][0] - t))
-            pos_nominale = waypoints["pos"][:, idx_t] # (n_droni, 3)
-            
-            # 2. Prendi la posizione calcolata dal solver (quella sicura)
-            pos_sicura = solver_data.u_pos[:, 0] # (n_droni, 3)
-            
-            # 3. Calcola la distanza Euclidea per ogni drone
-            distanze = np.linalg.norm(pos_sicura - pos_nominale, axis=-1)
-            
-            # 4. Salva i dati per il grafico
-            scostamenti_log.append(distanze)
-            tempi_log.append(t)
+            # ---------------------------------------------------------
+            # Store the one-MPC-step-ahead prediction for the next PHASE 1 check.
+            # data.pos[:, 0] = current state x_0 (tautological: the first block of S_x is the
+            # identity, input cannot affect step 0). data.pos[:, 1] = predicted state at
+            # t + 1/f_axswarm, the point actually comparable to Crazyflow at the next solve.
+            # ---------------------------------------------------------
+            pending_prediction = np.asarray(solver_data.pos[:, 1]).copy()
+            pending_prediction_time = t + 1.0 / solver_settings.freq
 
-            # Stampa live se l'intervento è pesante
-            if np.any(distanze > 0.1): 
-                logger.warning(f"[SAFETY] t={t:.2f}s: Deviazione max {np.max(distanze):.2f}m")
+            # ---------------------------------------------------------
+            # THESIS INSTRUMENTATION - PHASE 1
+            # Find the worst pairwise safety margin over the full
+            # AxSwarm predicted horizon and record where it occurs.
+            # Observational only: does not modify solver behavior.
+            # ---------------------------------------------------------
+            predicted_horizon = np.asarray(solver_data.pos).copy()
+            collision_envelope = np.asarray(
+                solver_settings.collision_envelope
+            )
+
+            worst_h = np.inf
+            worst_k = None
+            worst_pair = None
+            worst_euclidean = None
+            worst_normalized = None
+
+            n_drones = predicted_horizon.shape[0]
+
+            for k in range(predicted_horizon.shape[1]):
+                positions_k = predicted_horizon[:, k, :]
+
+                for i in range(n_drones):
+                    for j in range(i + 1, n_drones):
+                        relative_position = positions_k[i] - positions_k[j]
+
+                        euclidean_distance = np.linalg.norm(
+                            relative_position
+                        )
+
+                        normalized_distance = np.linalg.norm(
+                            relative_position / collision_envelope
+                        )
+
+                        h_ij = normalized_distance**2 - 1.0
+
+                        if h_ij < worst_h:
+                            worst_h = float(h_ij)
+                            worst_k = k
+                            worst_pair = (i, j)
+                            worst_euclidean = float(euclidean_distance)
+                            worst_normalized = float(normalized_distance)
+
+            horizon_times_log.append(t)
+            h_min_predicted_horizon_log.append(worst_h)
+
+            # Print only when the predicted horizon contains an
+            # envelope violation.
+            if worst_h < 0.0:
+                future_time = t + worst_k / solver_settings.freq
+
+                i, j = worst_pair
+
+                pre_min_normalized = pre_solve_min_normalized[i, j]
+
+                would_be_active = pre_min_normalized <= 1.0
+
+                print(
+                    f"[PHASE1-HORIZON] solve_t={t:.3f}s | "
+                    f"k={worst_k} | "
+                    f"future_t={future_time:.3f}s | "
+                    f"pair=({worst_pair[0]}, {worst_pair[1]}) | "
+                    f"distance={worst_euclidean:.6f} m | "
+                    f"normalized={worst_normalized:.6f} | "
+                    f"h={worst_h:.6f} | "
+                    f"pre_solve_min_norm={pre_min_normalized:.6f} | "
+                    f"pre_solve_within_envelope={would_be_active}"
+                )
 
             if not all(success):
                 logger.info("Solve failed")
-            # print("sim.py - simulate_axswarm: solver_data = ")
-            # print(solver_data)
 
             solver_data = solver_data.step(solver_data)
 
+            # ORIGINAL SWARMGPT BEHAVIOR: the next solve() is seeded from AxSwarm's own previous
+            # output, never from the measured crazyflow state - the loop is NOT closed here.
             pos, vel = solver_data.u_pos[:, 0], solver_data.u_vel[:, 0]
-            # print("sim.py - simulate_axswarm: pos = ")
-            # print(pos)
-            # print("sim.py - simulate_axswarm: vel = ")
-            # print(vel)
 
             control[0, :, :3] = solver_data.u_pos[:, 0]
             control[0, :, 3:6] = solver_data.u_vel[:, 0]
 
             # Log inputs
             controls.append(control[0, :, :6].copy())
+            # ORIGINAL SWARMGPT BEHAVIOR: `states` stores the commanded state reference, not the
+            # measured crazyflow state. Kept unchanged in Phase 1 to preserve the original
+            # baseline - see actual_pos_log above for the measured crazyflow state.
             states.append(control[0, :, :6].copy())
 
         # Run the simulation
@@ -177,43 +356,152 @@ def simulate_axswarm(
                  time.sleep(dt)
     sim.close()
 
-    # --- GENERAZIONE DEL GRAFICO FINALE ---
-    try:
-        plt.figure(figsize=(12, 6))
-        data_plot = np.array(scostamenti_log) # Shape: (steps, n_droni)
-        for i in range(sim.n_drones):
-            plt.plot(tempi_log, data_plot[:, i], label=f'Drone {i}')
-        
-        plt.axhline(y=0.2, color='r', linestyle='--', alpha=0.5, label='Soglia 20cm')
-        plt.title('Intervento Safety Filter: Scostamento dalla traiettoria ideale')
-        plt.xlabel('Tempo [s]')
-        plt.ylabel('Deviazione [m]')
-        plt.legend()
-        plt.grid(True, which='both', linestyle='--', alpha=0.5)
-        
-        graph_path = "deviazione_sicurezza.png"
-        plt.savefig(graph_path)
-        print(f"\n Analisi completata. Grafico salvato in: {graph_path}")
-    except Exception as e:
-        print(f"Errore nella generazione del grafico: {e}")
+    # --- PHASE 1: grafici (prediction error, safety margin, min distance) ---
+    if len(prediction_times) > 0:
+        prediction_errors = np.asarray(prediction_error_log)
+        try:
+            plt.figure(figsize=(12, 6))
+            for drone in range(sim.n_drones):
+                plt.plot(prediction_times, prediction_errors[:, drone], label=f"Drone {drone}")
+            plt.xlabel("Time [s]")
+            plt.ylabel("One-step prediction error [m]")
+            plt.title("AxSwarm one-step prediction error")
+            plt.grid(True)
+            plt.legend()
+            plt.savefig("phase1_prediction_error.png")
+            plt.close()
+            print("[PHASE1] Grafico prediction error salvato in: phase1_prediction_error.png")
+        except Exception as e:
+            print(f"[PHASE1] Errore nel grafico prediction error: {e}")
+
+        try:
+            plt.figure(figsize=(12, 6))
+            plt.plot(prediction_times, h_min_predicted_one_step_log, label="AxSwarm predicted (1 step)")
+            plt.plot(horizon_times_log, h_min_predicted_horizon_log, ":", label="AxSwarm predicted (full horizon, worst case)")
+            plt.plot(prediction_times, h_min_actual_log, label="Crazyflow actual")
+            plt.axhline(y=0.0, linestyle="--", label="Safety boundary")
+            plt.xlabel("Time [s]")
+            plt.ylabel("Minimum h")
+            plt.title("Predicted vs simulated safety margin")
+            plt.grid(True)
+            plt.legend()
+            plt.savefig("phase1_safety_margin.png")
+            plt.close()
+            print("[PHASE1] Grafico safety margin salvato in: phase1_safety_margin.png")
+        except Exception as e:
+            print(f"[PHASE1] Errore nel grafico safety margin: {e}")
+
+        try:
+            plt.figure(figsize=(12, 6))
+            plt.plot(
+                prediction_times, min_predicted_euclidean_one_step_log, label="AxSwarm predicted (1 step)"
+            )
+            plt.plot(prediction_times, min_actual_euclidean_log, label="Crazyflow actual")
+            plt.xlabel("Time [s]")
+            plt.ylabel("Minimum inter-drone distance [m]")
+            plt.title("Predicted vs simulated minimum separation")
+            plt.grid(True)
+            plt.legend()
+            plt.savefig("phase1_min_distance.png")
+            plt.close()
+            print("[PHASE1] Grafico min distance salvato in: phase1_min_distance.png")
+        except Exception as e:
+            print(f"[PHASE1] Errore nel grafico min distance: {e}")
     # --------------------------------------
 
     states_array = np.stack(states) if len(states) > 0 else np.zeros((1, sim.n_drones, 6))
     controls_array = np.stack(controls) if len(controls) > 0 else np.zeros((1, sim.n_drones, 6))
+
+    # =============================================================================
+    # THESIS INSTRUMENTATION - PHASE 1 SUMMARY
+    # Numerical summary of the observational metrics collected above.
+    # Does not modify planning or control behavior.
+    # =============================================================================
+    if len(prediction_times) > 0:
+        prediction_errors_arr = np.asarray(prediction_error_log)
+
+        h_pred_1step_arr = np.asarray(h_min_predicted_one_step_log)
+        h_actual_arr = np.asarray(h_min_actual_log)
+        h_pred_horizon_arr = np.asarray(h_min_predicted_horizon_log)
+
+        d_pred_arr = np.asarray(min_predicted_euclidean_one_step_log)
+        d_actual_arr = np.asarray(min_actual_euclidean_log)
+
+        # Same-time mismatch:
+        # positive -> actual execution has MORE safety margin than predicted
+        # negative -> actual execution has LESS safety margin than predicted
+        h_mismatch = h_actual_arr - h_pred_1step_arr
+
+        # Critical event:
+        # AxSwarm predicts the next state as safe, but Crazyflow is actually unsafe.
+        predicted_safe_actual_unsafe = np.sum(
+            (h_pred_1step_arr >= 0.0) & (h_actual_arr < 0.0)
+        )
+
+        # Opposite case: prediction says unsafe, execution is actually safe.
+        predicted_unsafe_actual_safe = np.sum(
+            (h_pred_1step_arr < 0.0) & (h_actual_arr >= 0.0)
+        )
+
+        print("\n========== PHASE 1 SUMMARY ==========")
+
+        print("\nPrediction error:")
+        print(f"  Mean: {np.mean(prediction_errors_arr):.6f} m")
+        print(f"  Max:  {np.max(prediction_errors_arr):.6f} m")
+
+        print("\nSafety margin h:")
+        print(f"  Min predicted (1 step): {np.min(h_pred_1step_arr):.6f}")
+        print(f"  Min actual:             {np.min(h_actual_arr):.6f}")
+        print(f"  Min predicted horizon:  {np.min(h_pred_horizon_arr):.6f}")
+
+        print("\nMinimum separation:")
+        print(f"  Min predicted (1 step): {np.min(d_pred_arr):.6f} m")
+        print(f"  Min actual:             {np.min(d_actual_arr):.6f} m")
+
+        print("\nPrediction/execution safety mismatch:")
+        print(f"  Min(actual h - predicted h): {np.min(h_mismatch):.6f}")
+        print(f"  Max(actual h - predicted h): {np.max(h_mismatch):.6f}")
+
+        print("\nSafety events:")
+        print(
+            "  Predicted-safe / actual-unsafe: "
+            f"{predicted_safe_actual_unsafe}"
+        )
+        print(
+            "  Predicted-unsafe / actual-safe: "
+            f"{predicted_unsafe_actual_safe}"
+        )
+
+        print("=====================================\n")
 
     sim_log = {
         "num_drones": sim.n_drones,
         "log_freq": solver_settings.freq,
         "sim_freq": sim.freq,
         "timestamps": np.arange(n_steps) / sim.control_freq,
-        # "states": np.array(states),
-        # "controls": np.array(controls),
         "states": states_array,
         "controls": controls_array,
         "waypoints": waypoints,
         "simulation_freq": sim.freq,
         "amswarm_every_n_steps": solve_every_n_steps,
         "solve_times": np.array(solve_times),
+        "phase1": {
+            "timestamps": np.asarray(prediction_times),
+            "predicted_next_pos": np.asarray(predicted_next_pos_log),
+            "actual_pos": np.asarray(actual_pos_log),
+            "prediction_error": np.asarray(prediction_error_log),
+            "min_predicted_euclidean_one_step": np.asarray(min_predicted_euclidean_one_step_log),
+            "min_actual_euclidean": np.asarray(min_actual_euclidean_log),
+            "min_predicted_normalized_one_step": np.asarray(min_predicted_normalized_one_step_log),
+            "min_actual_normalized": np.asarray(min_actual_normalized_log),
+            "h_min_predicted_one_step": np.asarray(h_min_predicted_one_step_log),
+            "h_min_actual": np.asarray(h_min_actual_log),
+            "horizon_timestamps": np.asarray(horizon_times_log),
+            "h_min_predicted_horizon": np.asarray(h_min_predicted_horizon_log),
+            "h_mismatch": (np.asarray(h_min_actual_log) - np.asarray(h_min_predicted_one_step_log)),
+            "predicted_safe_actual_unsafe": int(np.sum((np.asarray(h_min_predicted_one_step_log) >= 0.0) & (np.asarray(h_min_actual_log) < 0.0))),
+            "predicted_unsafe_actual_safe": int(np.sum((np.asarray(h_min_predicted_one_step_log) < 0.0) & (np.asarray(h_min_actual_log) >= 0.0))),
+        },
     }
     yield "result", sim_log, "placeholder"
     # return sim_log

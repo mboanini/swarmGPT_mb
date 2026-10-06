@@ -327,10 +327,18 @@ class Choreographer:
         #     logger.info("Executing Case 3: Hybrid Output Detected")
         #     waypoints = self._handle_hybrid_choreography(choreo_steps, timestamps)
 
+        print(
+            f"[DEBUG choreographer] pre-clip pos range (m): "
+            f"min={waypoints['pos'].min(axis=(0, 1))} max={waypoints['pos'].max(axis=(0, 1))}"
+        )
         # Clip waypoint values to the physical limits
         waypoints["pos"] = np.clip(waypoints["pos"], self.lim_lower, self.lim_upper)
         if strict:
             self._collision_check(waypoints["pos"])
+        print(
+            f"[DEBUG choreographer] waypoints ready: pos.shape={waypoints['pos'].shape} "
+            f"time.shape={waypoints['time'].shape}"
+        )
         return waypoints
 
     def _response2choreo(self, text: str) -> dict[int, list[str]]:
@@ -574,12 +582,19 @@ class Choreographer:
                 )
                 for k, v in _waypoints.items():
                     waypoints[k] = v if k not in waypoints else waypoints[k] | v
+                print(
+                    f"[DEBUG choreographer] primitive={fn} args={args} "
+                    f"tstart={motion_primitive['tstart']:.2f} tend={motion_primitive['tend']:.2f} "
+                    f"-> swarm_pos[:3] (cm)=\n{swarm_pos[:3]}"
+                )
 
         waypoints = self._fill_missing_waypoints(waypoints)
         waypoints = dicts2arrays(waypoints)
         pos = einops.rearrange(np.array(list(waypoints.values())), "t d c -> d t c")
         pos /= 100  # Convert back to meters. TODO: Remove all conversions
         t = np.tile(np.array(list(waypoints.keys())), (self.num_drones, 1))
+        print(f"[DEBUG choreographer] _motion_primitives2time_and_pos: t.shape={t.shape} pos.shape={pos.shape}")
+        print(f"[DEBUG choreographer] final_pos (m) per drone:\n{pos[:, -1, :]}")
         return t, pos
 
     def _fill_missing_waypoints(

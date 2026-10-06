@@ -418,13 +418,22 @@ class AppBackend:
         assert sim_data is not None, "simulate_axswarm returned no data"
 
         t = sim_data["timestamps"][::10]
+        print(
+            f"[DEBUG backend] building splines: t.shape={t.shape} "
+            f"controls.shape={sim_data['controls'].shape}"
+        )
         lam = 0.1
         self.splines.clear()
         for i, drone in self.choreographer.agents.items():
             controls = sim_data["controls"][:, i, :3]
+            print(
+                f"[DEBUG backend] drone {drone} (idx {i}): first controls={controls[0]} "
+                f"last controls={controls[-1]}"
+            )
             self.splines[drone] = [
                 make_smoothing_spline(t, controls[:, j], lam=lam) for j in range(3)
             ]
+        print(f"[DEBUG backend] splines built for drones: {list(self.splines.keys())}")
 
         if gui:
             self._start_viz(self.splines, float(t[-1]))
