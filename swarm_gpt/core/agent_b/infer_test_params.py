@@ -25,6 +25,9 @@ Rules:
 - If `drone_ids` is a parameter, use a list of integers from 1 to {n_drones} (1-indexed), e.g. [1, 2, 3, 4].
 - For other parameters, pick realistic values based on the description (e.g. distances in cm, angles in degrees, counts as small integers).
 
+- The test window is ({tstart}, {tend}] seconds. Keep duration values within this window.
+- This is scenario {case_number}; choose a different valid combination of values for each scenario.
+
 Output: one Python tuple on a single line, nothing else.
 Examples: (3, 150) or ([1, 2, 3, 4], 90, 'z')
 """.strip()
@@ -48,18 +51,27 @@ def _call_llm(prompt: str) -> str:
     return response.choices[0].message.content
 
 
-def infer(function_definition: str) -> tuple | None:
+def infer(
+    function_definition: str,
+    n_drones: int = _N_TEST_DRONES,
+    tstart: float = 0.0,
+    tend: float = 5.0,
+    case_index: int = 0,
+) -> tuple | None:
     """Call the LLM to generate a test_params tuple from the function interface.
 
     Returns a tuple on success, None if the LLM call or parsing fails
-    (RuntimeCheck will be skipped in that case).
+    (the caller decides how to handle failed inference).
     """
     params_description = _extract_params_description(function_definition)
-    prompt = _PROMPT.format(params_description=params_description, n_drones=_N_TEST_DRONES)
+    prompt = _PROMPT.format(
+        params_description=params_description, n_drones=n_drones,
+        tstart=tstart, tend=tend, case_number=case_index + 1,
+    )
     try:
         raw = _call_llm(prompt).strip()
     except Exception as exc:
-        logger.warning(f"InferTestParams: LLM call failed ({exc}) — RuntimeCheck will be skipped")
+        logger.warning(f"InferTestParams: LLM call failed ({exc})")
         return None
 
     # Strip markdown fences if present
@@ -77,5 +89,5 @@ def infer(function_definition: str) -> tuple | None:
         logger.info(f"InferTestParams: → {value}")
         return value
     except (ValueError, SyntaxError) as exc:
-        logger.warning(f"InferTestParams: could not parse '{raw}' ({exc}) — RuntimeCheck will be skipped")
+        logger.warning(f"InferTestParams: could not parse '{raw}' ({exc})")
         return None

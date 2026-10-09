@@ -7,9 +7,8 @@ from swarm_gpt.core.agent_b.describe_primitive import DescribePrimitive
 from swarm_gpt.core.agent_b.design_function import DesignFunction
 from swarm_gpt.core.agent_b.function_node import FunctionNode
 from swarm_gpt.core.agent_b.grammar_check import check as grammar_check, write_staging_file
-from swarm_gpt.core.agent_b.infer_test_params import infer as infer_test_params
 from swarm_gpt.core.agent_b.mechanical_check import check as mechanical_check
-from swarm_gpt.core.agent_b.runtime_check import run as runtime_check
+from swarm_gpt.core.agent_b.runtime_cases import prepare_test_params, check_cases
 from swarm_gpt.core.agent_b.validate_description import ValidateNameDesc
 from swarm_gpt.core.agent_b.write_function import WriteFunction
 
@@ -33,6 +32,47 @@ class Pipeline:
             node = self._run_one(cmd)
             nodes.append(node)
         return nodes
+
+    def _static_check(self, node: FunctionNode, staging_path: Path,) -> list[str]:
+        write_staging_file(staging_path, node.body)
+
+        return (grammar_check(staging_path) + mechanical_check(node.body, node.name))
+
+    def _certify_static(
+        self,
+        node: FunctionNode,
+        staging_path: Path,
+    ) -> None:
+
+        for repair_count in range(_MAX_REPAIRS + 1):
+            static_errors = self._static_check(node, staging_path)
+
+            if not static_errors:
+                logger.info(
+                    "Static certification passed after %d repair(s)",
+                    repair_count,
+                )
+                return
+
+            logger.warning(
+                "Static certification failed after %d repair(s): %d error(s)",
+                repair_count,
+                len(static_errors),
+            )
+
+            for error in static_errors:
+                logger.warning("  %s", error)
+
+            if repair_count == _MAX_REPAIRS:
+                raise RuntimeError(
+                    f"Static certification failed for primitive "
+                    f"'{node.name}' after {_MAX_REPAIRS} repair attempts:\n"
+                    + "\n".join(f"- {error}" for error in static_errors)
+                )
+
+            self._debugger.setup(node)
+            self._debugger.set_errors(static_errors)
+            self._debugger.run()
 
     def _run_one(self, cmd: str) -> FunctionNode:
         # --- Describe ---
@@ -62,58 +102,49 @@ class Pipeline:
         self._reviewer.run()
 
         # --- Static Check loop (pylint + mechanical AST checks) ---
-        for repair_count in range(_MAX_REPAIRS + 1):
-            write_staging_file(staging_path, node.body)
-            static_errors = grammar_check(staging_path) + mechanical_check(node.body, node.name)
-            if not static_errors:
-                logger.info("Static certification passed after %d repair(s)", repair_count,)
-                break
-            logger.warning("Static certification failed after %d repair(s): %d error(s)", repair_count, len(static_errors),)
-            for error in static_errors:
-                logger.warning(" %s", error)
-            if repair_count == _MAX_REPAIRS:
-                raise RuntimeError(
-                    f"Static certification failed for primitive "
-                    f"'{node.name}' after {_MAX_REPAIRS} repair attempts:\n"
-                    + "\n".join(f"- {error}" for error in static_errors)
-                )
-                # logger.error("StaticCheck: max attempts reached, proceeding with current code")
-                # break
-            self._debugger.setup(node)
-            self._debugger.set_errors(static_errors)
-            self._debugger.run()
+        self._certify_static(node, staging_path)
 
         # --- RuntimeCheck loop ---
-        test_params = infer_test_params(node.definition)
-        if test_params is None:
+        inferred = prepare_test_params(
+            function_definition=node.definition,
+            n_args=node.n_args,
+        )
+
+        if inferred is None:
             raise RuntimeError(
-                f"Runtime certification could not be performed for "
-                f"primitive '{node.name}': test parameter inference failed."
+                f"Unable to prepare runtime test parameters for {node.name}"
             )
-        # if test_params is not None:
+
         runtime_context = (
             f"Description: {node.description}\n\n"
             f"Interface:\n{node.definition}"
         )
+
         for repair_count in range(_MAX_REPAIRS + 1):
-            runtime_errors = runtime_check(node.body, node.name, test_params)
+            runtime_errors = check_cases(
+                body=node.body,
+                func_name=node.name,
+                inferred=inferred,
+            )
+
             if not runtime_errors:
-                logger.info("Runtime certification passed after %d repair(s)", repair_count,)
                 break
-            logger.warning("Runtime certification failed after %d repair(s): %d error(s)", repair_count, len(runtime_errors),)
-            for error in runtime_errors:
-                logger.warning("  %s", error)
+
             if repair_count == _MAX_REPAIRS:
                 raise RuntimeError(
-                    f"Runtime certification failed for primitive "
-                    f"'{node.name}' after {_MAX_REPAIRS} repair attempts:\n"
-                    + "\n".join(f"- {error}" for error in runtime_errors)
+                    f"Runtime certification failed for {node.name}: "
+                    + "; ".join(runtime_errors)
                 )
+
             self._debugger.setup(node)
-            self._debugger.set_errors(runtime_errors, context=runtime_context)
+            self._debugger.set_errors(
+                runtime_errors,
+                context=runtime_context,
+            )
             self._debugger.run()
-        # else:
-        #     logger.warning(f"RuntimeCheck skipped: infer_test_params failed for {name}")
+
+            # Every runtime repair must pass static certification again
+            self._certify_static(node, staging_path)
 
         logger.info(f"Done: {name} (n_args={node.n_args})")
         return node
