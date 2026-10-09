@@ -31,5 +31,4 @@ class WriteFunction(ActionNode):
         # parser.check_n_args()
         parser.strip_shadowed_helpers()
         self._node.body   = parser.function_definition
-        self._node.n_args = parser.n_args
         self._node.state  = State.IMPLEMENTED

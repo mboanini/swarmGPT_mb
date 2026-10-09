@@ -52,7 +52,11 @@ If `params`:
 - Do NOT change the function name or signature.
 - Do NOT import anything — `np`, `_assign_positions`, `_form_grid`, `_sanitize_drone_ids`,
   `_formation_waypoints`, `_formation_arrival_time` are already in scope.
-- Always unpack params with one destructuring line: `drone_ids, p1, p2, ... = params`. Never use index access.
+- Always unpack params with one destructuring assignment,
+  preserving exactly the parameter names and order from the Design docstring.
+  Never use index access.
+- If drone_ids is declared, sanitize it before indexing.
+  If drone_ids is not declared, operate on all drones using swarm_pos.
 - Call `_sanitize_drone_ids(drone_ids, swarm_pos.shape[0])` before using drone_ids as indices.
 - Use `_assign_positions` when assigning drones to new target positions.
 - Every entry in `des_pos` must be unique — no two rows can share the same coordinates. If you build `des_pos` by concatenating multiple sub-arrays (segments, rings, layers…), ensure no coordinate appears in more than one sub-array.

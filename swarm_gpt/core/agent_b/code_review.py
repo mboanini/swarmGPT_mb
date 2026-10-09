@@ -73,7 +73,6 @@ class CodeReview(ActionNode):
             parser.parse(code)
             parser.check_function_name(self._node.name)
             self._node.body   = parser.function_definition
-            self._node.n_args = parser.n_args
             self._node.state  = State.IMPLEMENTED
             logger.info("CodeReview/CodeFix: corrections applied")
         except Exception as exc:

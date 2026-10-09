@@ -36,7 +36,7 @@ class Pipeline:
     def _static_check(self, node: FunctionNode, staging_path: Path,) -> list[str]:
         write_staging_file(staging_path, node.body)
 
-        return (grammar_check(staging_path) + mechanical_check(node.body, node.name))
+        return (grammar_check(staging_path) + mechanical_check(node.body, node.name, definition=node.definition))
 
     def _certify_static(
         self,
@@ -71,7 +71,15 @@ class Pipeline:
                 )
 
             self._debugger.setup(node)
-            self._debugger.set_errors(static_errors)
+            self._debugger.set_errors(
+                static_errors,
+                context=(
+                    "The following Design interface is authoritative and immutable.\n"
+                    "Preserve its # n_args comment, function signature, docstring, "
+                    "and parameter names/order exactly.\n\n"
+                    f"{node.definition}"
+                ),
+            )
             self._debugger.run()
 
     def _run_one(self, cmd: str) -> FunctionNode:

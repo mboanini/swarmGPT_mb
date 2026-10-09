@@ -5,6 +5,7 @@ Run alongside pylint in the static check loop (see pipeline.py).
 """
 import ast
 import io
+import re
 import tokenize as _tokenize
 
 
@@ -103,7 +104,65 @@ def _check_all_returns(body: list[ast.stmt]) -> list[str]:
     return errors
 
 
-def check(source: str, func_name: str) -> list[str]:
+def _check_design_interface(
+    source: str, definition: str, func_name: str, destructurings: list[ast.Assign],
+) -> list[str]:
+    """Compare the implementation against the original Design, without changing it."""
+    try:
+        design_tree = ast.parse(definition)
+    except SyntaxError as exc:
+        return [f"Design interface: invalid definition: {exc}"]
+    functions = [
+        node for node in design_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == func_name
+    ]
+    if len(functions) != 1:
+        return [f"Design interface: expected one definition for '{func_name}'"]
+    docstring = ast.get_docstring(functions[0]) or ""
+    declaration = re.search(
+        r"^\s*params\s*:\s*tuple\[.*?\]\s*[—–-]\s*\(([^)]*)\)",
+        docstring, re.MULTILINE | re.DOTALL,
+    )
+    if declaration is None:
+        return ["Design interface: cannot read parameter names and order from Design docstring"]
+    names = [name.strip() for name in declaration.group(1).split(",") if name.strip()]
+    if not names or any(not name.isidentifier() for name in names) or len(set(names)) != len(names):
+        return ["Design interface: invalid parameter names in Design docstring"]
+    failures = []
+    body_tree = ast.parse(source)
+    body_functions = [
+        node for node in body_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == func_name
+    ]
+    if len(body_functions) != 1:
+        return ["Design interface: expected exactly one implementation"]
+    if ast.get_docstring(body_functions[0]) != docstring:
+        failures.append(
+            "Design interface: implementation docstring differs from Design"
+        )
+    design_count = _get_n_args_comment(definition)
+    body_count = _get_n_args_comment(source)
+    if design_count is None:
+        failures.append("Design interface: Design '# n_args: N' comment is missing or invalid")
+    elif design_count != len(names):
+        failures.append(
+            f"Design interface: Design # n_args: {design_count} but docstring declares {len(names)} parameters"
+        )
+    if body_count != design_count:
+        failures.append(
+            f"Design interface: body # n_args: {body_count} differs from Design # n_args: {design_count}"
+        )
+    if len(destructurings) == 1:
+        elements = destructurings[0].targets[0].elts
+        actual = [element.id if isinstance(element, ast.Name) else None for element in elements]
+        if actual != names:
+            failures.append(
+                f"Design interface: params must unpack as {tuple(names)!r} in Design order; got {tuple(actual)!r}"
+            )
+    return failures
+
+
+def check(source: str, func_name: str, definition: str | None = None) -> list[str]:
     """Run all mechanical checks on the function source.
 
     Returns a list of error strings; empty list means all checks passed.
@@ -135,6 +194,9 @@ def check(source: str, func_name: str) -> list[str]:
             failures.append(
                 f"Check 1: # n_args: {n_declared} but destructuring has {n_actual} variables"
             )
+
+    if definition is not None:
+        failures.extend(_check_design_interface(source, definition, func_name, destructurings))
 
     # Check 2b: no params[i] index access
     index_hits = _find_params_index_access(body)
