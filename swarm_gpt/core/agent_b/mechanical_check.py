@@ -2,26 +2,12 @@
 
 Verifies domain-specific structural rules that pylint cannot catch.
 Run alongside pylint in the static check loop (see pipeline.py).
+The Design interface itself is validated earlier, in design_function.py;
+the returned value is validated by runtime_check.py.
 """
 import ast
-import io
-import re
-import tokenize as _tokenize
 
-
-def _get_n_args_comment(source: str) -> int | None:
-    """Extract N from '# n_args: N' via tokenize (ast.parse strips comments)."""
-    try:
-        tokens = _tokenize.generate_tokens(io.StringIO(source).readline)
-        for tok in tokens:
-            if tok.type == _tokenize.COMMENT and "n_args" in tok.string:
-                try:
-                    return int(tok.string.split(":")[1].strip().split()[0])
-                except (IndexError, ValueError):
-                    return None
-    except _tokenize.TokenError:
-        return None
-    return None
+from swarm_gpt.core.agent_b.parser import param_names
 
 
 def _main_func_body(tree: ast.AST, func_name: str) -> list[ast.stmt]:
@@ -89,81 +75,8 @@ def _find_forbidden_statements(body: list[ast.stmt]) -> list[str]:
     return found
 
 
-def _check_all_returns(body: list[ast.stmt]) -> list[str]:
-    """Check 6 (partial): every return must be a 2-tuple (final_pos, waypoints)."""
-    errors = []
-    returns = sorted(
-        [node for stmt in body for node in ast.walk(stmt) if isinstance(node, ast.Return)],
-        key=lambda n: n.lineno,
-    )
-    if not returns:
-        return ["Check 6: no return statement found"]
-    for r in returns:
-        if not (isinstance(r.value, ast.Tuple) and len(r.value.elts) == 2):
-            errors.append(f"Check 6: return at line {r.lineno} is not a 2-tuple (final_pos, waypoints)")
-    return errors
-
-
-def _check_design_interface(
-    source: str, definition: str, func_name: str, destructurings: list[ast.Assign],
-) -> list[str]:
-    """Compare the implementation against the original Design, without changing it."""
-    try:
-        design_tree = ast.parse(definition)
-    except SyntaxError as exc:
-        return [f"Design interface: invalid definition: {exc}"]
-    functions = [
-        node for node in design_tree.body
-        if isinstance(node, ast.FunctionDef) and node.name == func_name
-    ]
-    if len(functions) != 1:
-        return [f"Design interface: expected one definition for '{func_name}'"]
-    docstring = ast.get_docstring(functions[0]) or ""
-    declaration = re.search(
-        r"^\s*params\s*:\s*tuple\[.*?\]\s*[—–-]\s*\(([^)]*)\)",
-        docstring, re.MULTILINE | re.DOTALL,
-    )
-    if declaration is None:
-        return ["Design interface: cannot read parameter names and order from Design docstring"]
-    names = [name.strip() for name in declaration.group(1).split(",") if name.strip()]
-    if not names or any(not name.isidentifier() for name in names) or len(set(names)) != len(names):
-        return ["Design interface: invalid parameter names in Design docstring"]
-    failures = []
-    body_tree = ast.parse(source)
-    body_functions = [
-        node for node in body_tree.body
-        if isinstance(node, ast.FunctionDef) and node.name == func_name
-    ]
-    if len(body_functions) != 1:
-        return ["Design interface: expected exactly one implementation"]
-    if ast.get_docstring(body_functions[0]) != docstring:
-        failures.append(
-            "Design interface: implementation docstring differs from Design"
-        )
-    design_count = _get_n_args_comment(definition)
-    body_count = _get_n_args_comment(source)
-    if design_count is None:
-        failures.append("Design interface: Design '# n_args: N' comment is missing or invalid")
-    elif design_count != len(names):
-        failures.append(
-            f"Design interface: Design # n_args: {design_count} but docstring declares {len(names)} parameters"
-        )
-    if body_count != design_count:
-        failures.append(
-            f"Design interface: body # n_args: {body_count} differs from Design # n_args: {design_count}"
-        )
-    if len(destructurings) == 1:
-        elements = destructurings[0].targets[0].elts
-        actual = [element.id if isinstance(element, ast.Name) else None for element in elements]
-        if actual != names:
-            failures.append(
-                f"Design interface: params must unpack as {tuple(names)!r} in Design order; got {tuple(actual)!r}"
-            )
-    return failures
-
-
-def check(source: str, func_name: str, definition: str | None = None) -> list[str]:
-    """Run all mechanical checks on the function source.
+def check(source: str, func_name: str, definition: str) -> list[str]:
+    """Run all mechanical checks on the function source against its Design definition.
 
     Returns a list of error strings; empty list means all checks passed.
     """
@@ -178,25 +91,24 @@ def check(source: str, func_name: str, definition: str | None = None) -> list[st
 
     failures = []
 
-    # Check 1 + 2a: n_args comment must exist, single destructuring line, counts must match
-    n_declared = _get_n_args_comment(source)
-    if n_declared is None:
-        failures.append("Check 1: '# n_args: N' comment is missing from the function")
-
+    # Check 2a: exactly one `a, b, c = params` line, unpacking the Design parameters in order
     destructurings = _find_params_destructuring(body)
     if len(destructurings) != 1:
         failures.append(
             f"Check 2: expected exactly 1 'a, b, c = params' line, found {len(destructurings)}"
         )
-    elif n_declared is not None:
-        n_actual = len(destructurings[0].targets[0].elts)
-        if n_declared != n_actual:
-            failures.append(
-                f"Check 1: # n_args: {n_declared} but destructuring has {n_actual} variables"
-            )
-
-    if definition is not None:
-        failures.extend(_check_design_interface(source, definition, func_name, destructurings))
+    else:
+        unpacked = [ast.unparse(elt) for elt in destructurings[0].targets[0].elts]
+        try:
+            expected = param_names(definition, func_name)
+        except ValueError as exc:
+            failures.append(f"Check 2: cannot read the Design parameter declaration: {exc}")
+        else:
+            if unpacked != expected:
+                failures.append(
+                    f"Check 2: params must be unpacked as '{', '.join(expected)} = params' "
+                    f"(Design order), got '{', '.join(unpacked)} = params'"
+                )
 
     # Check 2b: no params[i] index access
     index_hits = _find_params_index_access(body)
@@ -222,9 +134,6 @@ def check(source: str, func_name: str, definition: str | None = None) -> list[st
                 failures.append(
                     f"Check 3: drone_ids used as index before _sanitize_drone_ids at line(s) {early}"
                 )
-
-    # Check 6 (partial): all return statements are 2-tuples
-    failures.extend(_check_all_returns(body))
 
     # Check 7: no while / raise / assert
     forbidden = _find_forbidden_statements(body)

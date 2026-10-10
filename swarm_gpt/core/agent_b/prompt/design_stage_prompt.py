@@ -82,6 +82,8 @@ somewhere and stop? Keeps moving -> `steps`. Arrives and stops -> `time_to_finis
 - The `# n_args: N` comment is mandatory — replace N with the TOTAL number of elements in the
   params tuple. If drone_ids is the first element, it counts: e.g. `(drone_ids, radius, height)`
   → N=3, not N=2. N must equal exactly the number of comma-separated items in the params tuple.
+- The docstring line `params: tuple[type, ...] — (name1, name2, ...)` is mandatory, on one line:
+  list the N parameter names in order, names only (no types), separated by commas.
 - Do NOT write the body — `pass` only.
 - Do NOT add imports — `np`, `_assign_positions`, `_form_grid` are already in scope.
 - The function name must be exactly `{function_name}`.

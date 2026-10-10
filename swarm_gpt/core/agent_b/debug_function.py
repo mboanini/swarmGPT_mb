@@ -18,8 +18,9 @@ class DebugFunction(ActionNode):
         error_block = "\n".join(f"  - {e}" for e in self._errors)
         context_block = f"\n\n## Context\n{self._context}" if self._context else ""
         self.prompt = (
-            f"The following Python function has errors. Fix them and return "
-            f"the corrected function — same name, same signature, same # n_args comment, same docstring."
+            "The following Python function has errors. Fix them and return the corrected function. "
+            "Keep the same name, signature and # n_args comment, and unpack `params` with the same "
+            "names, in the same order and with the same meaning as the Interface."
             f"{context_block}\n\n"
             f"```python\n{self._node.body}\n```\n\n"
             f"Errors:\n{error_block}\n\n"

@@ -16,6 +16,29 @@ def parse_text(text: str, lang: str = "python") -> str:
     return matches[0].strip()
 
 
+# Design docstring line declaring the params tuple: `params: tuple[...] — (name1, name2, ...)`.
+# Same format primitive_writer reads to describe the primitive to the Router.
+_PARAMS_LINE = re.compile(r"^\s*params\s*:\s*tuple\[.*\]\s*[—-]+\s*\((.*)\)\s*$", re.MULTILINE)
+
+
+def param_names(definition: str, func_name: str) -> list[str]:
+    """Return the ordered parameter names declared in the Design docstring.
+
+    Raises ValueError if the declaration is missing or the names are not unique identifiers.
+    """
+    docstring = ""
+    for node in ast.parse(definition).body:
+        if isinstance(node, ast.FunctionDef) and node.name == func_name:
+            docstring = ast.get_docstring(node) or ""
+    match = _PARAMS_LINE.search(docstring)
+    if match is None:
+        raise ValueError("docstring has no 'params: tuple[...] — (name1, name2, ...)' line")
+    names = [name.strip() for name in match.group(1).rstrip(", ").split(",")]
+    if not all(name.isidentifier() for name in names) or len(set(names)) != len(names):
+        raise ValueError(f"parameter names must be unique identifiers, got ({match.group(1)})")
+    return names
+
+
 class FunctionParser:
     """Parse a single Python function from a code string.
 
@@ -44,11 +67,12 @@ class FunctionParser:
         self._n_args = int(match.group(1)) if match else 0
 
     def check_function_name(self, expected: str):
+        """The expected function must be defined at module level, not nested."""
         tree = ast.parse(self._code)
-        all_names = [n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]
-        if expected not in all_names:
+        top_level = [n.name for n in tree.body if isinstance(n, ast.FunctionDef)]
+        if expected not in top_level:
             raise ValueError(
-                f"Function '{expected}' not found in code. Found: {all_names}"
+                f"Function '{expected}' not found at module level. Found: {top_level}"
             )
 
     def check_n_args(self) -> None:
