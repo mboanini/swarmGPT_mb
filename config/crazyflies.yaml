@@ -1,0 +1,247 @@
+# crazyswarm2 / crazyflie_ros2 parameter format (ROS 2 Humble)
+# Converted from the ROS 1 crazyflies.yaml + crazyflieTypes.yaml
+#
+# Each key under "robots:" must be a unique name (e.g. cf11, cf12 ...).
+# The id field maps to the last byte of the radio URI (0x0B = 11, etc.).
+
+/crazyflie_server:
+  ros__parameters:
+
+  #   # ── Motion capture ────────────────────────────────────────────────────────
+  #   motion_capture_type: "vicon"          # vicon | optitrack | qualisys | vrpn | none
+  #   object_tracking_type: "motionCapture" # motionCapture | libobjecttracker
+  #   motion_capture_host_name: "localhost"
+  #   send_position_only: false
+
+  #   # ── Logging ───────────────────────────────────────────────────────────────
+  #   enable_logging: false
+  #   enable_logging_pose: true
+  #   enable_parameters: true
+  #   genericLogTopics: ["log1"]
+  #   genericLogTopicFrequencies: [10]
+  #   genericLogTopic_log1_Variables: ["stateEstimate.x", "ctrltarget.x"]
+
+    # ── Robot instances ───────────────────────────────────────────────────────
+    # named list of all robots
+    fileversion: 3
+
+    robots:
+      cf6:
+        enabled: true
+        uri: radio://0/80/2M/E7E7E7E706
+        initial_position: [0.0, 0.5, 0.0]
+        type: cf22  # see robot_types
+        # firmware_params:
+        #   kalman:
+        #     pNAcc_xy: 1.0 # default 0.5
+        firmware_logging:
+          enabled: true
+        #   custom_topics:
+        #     topic_name3: 
+        #       frequency: 1
+        #       vars: ["acc.x", "acc.y"]
+        # reference_frame: "odom_cf231" # use a custom reference frame if no global coordinate system is available
+
+      cf8:
+        enabled: true
+        uri: radio://0/80/2M/E7E7E7E708
+        initial_position: [0.0, -0.5, 0.0]
+        type: cf22  # see robot_types
+        # firmware_params:
+        #   kalman:
+        #     pNAcc_xy: 1.0 # default 0.5
+        firmware_logging:
+          enabled: true
+        #  custom_topics:
+        #    topic_name3: 
+        #      frequency: 1
+        #      vars: ["acc.x", "acc.y", "acc.z"]
+        # reference_frame: "odom_cf5" 
+
+    # Definition of the various robot types
+    robot_types:
+      cf21:
+        motion_capture:
+          tracking: "librigidbodytracker" # one of "vendor", "librigidbodytracker"
+          # only if enabled; see motion_capture.yaml
+          marker: default_single_marker
+          dynamics: default
+        big_quad: false
+        battery:
+          voltage_warning: 3.8  # V
+          voltage_critical: 3.7 # V
+        # firmware_params:
+        #   kalman:
+        #     pNAcc_xy: 1.0 # default 0.5
+        #firmware_logging:
+        #   enabled: true
+        #   default_topics:
+        #   pose:
+        #     frequency: 1 # Hz
+        #   custom_topics:
+        #    topic_name3: 
+        #      frequency: 1
+        #      vars: ["acc.x", "acc.y", "acc.z"]
+        # reference_frame: "odom" 
+      cf22:
+        motion_capture:
+          tracking: "vendor" # one of "vendor", "librigidbodytracker"
+          # only if enabled; see motion_capture.yaml
+          # marker: default_single_marker
+          # dynamics: default
+        big_quad: false
+        battery:
+          voltage_warning: 3.8  # V
+          voltage_critical: 3.7 # V
+        # firmware_params:
+        #   kalman:
+        #     pNAcc_xy: 1.0 # default 0.5
+        firmware_logging:
+          enabled: true
+        #   default_topics:
+        #   pose:
+        #     frequency: 1 # Hz
+        #   custom_topics:
+        #    topic_name3: 
+        #      frequency: 1
+        #      vars: ["acc.x", "acc.y", "acc.z"]
+        # reference_frame: "odom" 
+      cf21_mocap_deck:
+        motion_capture:
+          tracking: "librigidbodytracker" # one of "vendor", "librigidbodytracker"
+          # only if enabled; see motion_capture.yaml
+          marker: mocap_deck
+          dynamics: default
+        big_quad: false
+        battery:
+          voltage_warning: 3.8  # V
+          voltage_critical: 3.7 # V
+        # firmware_params:
+        #   kalman:
+        #     pNAcc_xy: 1.0 # default 0.5
+        #firmware_logging:
+        #   enabled: true
+        #   default_topics:
+        #   pose:
+        #     frequency: 1 # Hz
+        #   custom_topics:
+        #    topic_name3: 
+        #      frequency: 1
+        #      vars: ["acc.x", "acc.y", "acc.z"]
+        # reference_frame: "mocap" 
+
+    # global settings for all robots
+    all:
+      # firmware logging for all drones (use robot_types/type_name to set per type, or
+      # robots/drone_name to set per drone)
+      firmware_logging:
+        enabled: true
+        default_topics:
+        # remove to disable default topic
+          pose:
+            frequency: 10 # Hz
+          status:
+            frequency: 1 # Hz
+        #custom_topics:
+        #  topic_name1:
+        #    frequency: 10 # Hz
+        #    vars: ["stateEstimateZ.x", "stateEstimateZ.y", "stateEstimateZ.z", "pm.vbat"]
+        #  topic_name2:
+        #    frequency: 1 # Hz
+        #    vars: ["stabilizer.roll", "stabilizer.pitch", "stabilizer.yaw"]
+      # firmware parameters for all drones (use robot_types/type_name to set per type, or
+      # robots/drone_name to set per drone)
+      firmware_params:
+        commander:
+          enHighLevel: 1
+        stabilizer:
+          estimator: 2 # 1: complementary, 2: kalman
+          controller: 2 # 1: PID, 2: mellinger
+        # ring:
+        #   effect: 16 # 6: double spinner, 7: solid color, 16: packetRate
+        #   solidBlue: 255 # if set to solid color
+        #   solidGreen: 0 # if set to solid color
+        #   solidRed: 0 # if set to solid color
+        #   headlightEnable: 0
+        locSrv:
+          extPosStdDev: 1e-3
+          extQuatStdDev: 0.5e-1
+        # kalman:
+        #   resetEstimation: 1
+      # reference frame for on-board state-estimate of all drones (use robot_types/type_name to set per type, or
+      # robots/drone_name to set per drone)
+      reference_frame: "world"
+      broadcasts:
+        num_repeats: 15 # number of times broadcast commands are repeated
+        delay_between_repeats_ms: 1 # delay in milliseconds between individual repeats
+
+    # robots:
+    #   cf11:
+    #     enabled: true
+    #     uri: radio://0/100/2M/E7E7E7E70B
+    #     initial_position: [0.5, 0.5, 0.0]
+    #     type: 
+    #   cf12:
+    #     enabled: true
+    #     uri: radio://0/100/2M/E7E7E7E70C
+    #     initial_position: [0.5, -0.5, 0.0]
+    #     type: medium
+    #   cf13:
+    #     enabled: true
+    #     uri: radio://0/100/2M/E7E7E7E70D
+    #     initial_position: [-0.5, 0.5, 0.0]
+    #     type: medium
+    #   cf14:
+    #     enabled: true
+    #     uri: radio://0/100/2M/E7E7E7E70E
+    #     initial_position: [-0.5, -0.5, 0.0]
+    #     type: medium
+    #   cf15:
+    #     enabled: true
+    #     uri: radio://0/100/2M/E7E7E7E70F
+    #     initial_position: [1.0, 0.5, 0.0]
+    #     type: medium
+
+    # # ── Robot types ───────────────────────────────────────────────────────────
+    # robot_types:
+    #   medium:
+    #     big_quad: true
+    #     battery_voltage_warning: 7.6
+    #     battery_voltage_critical: 7.4
+    #     marker_configuration: 1
+    #     dynamics_configuration: 0
+    #     firmware_params:
+    #       commander:
+    #         enHighLevel: 1
+    #       stabilizer:
+    #         estimator: 2   # 1: complementary, 2: kalman
+    #         controller: 2  # 1: PID, 2: mellinger
+    #       ring:
+    #         effect: 16
+    #         solidBlue: 255
+    #         solidGreen: 0
+    #         solidRed: 0
+    #         headlightEnable: 0
+    #       locSrv:
+    #         extPosStdDev: 1.0e-3
+    #         extQuatStdDev: 0.05
+    #       kalman:
+    #         resetEstimation: 1
+    #       ctrlMel:
+    #         kp_xy: 2.0
+    #         kd_xy: 1.0
+    #         ki_xy: 0.1
+    #         i_range_xy: 2.0
+    #         kR_xy: 50000
+    #         kw_xy: 16000
+    #         kR_z: 60000
+    #         kw_z: 12000
+    #         ki_m_z: 500
+    #         i_range_m_z: 1500
+    #         kd_omega_rp: 200
+    #         kp_z: 3.0
+    #         kd_z: 1.0
+    #         ki_z: 0.5
+    #         i_range_z: 2.0
+    #         mass: 0.110
+    #         massThrust: 23000

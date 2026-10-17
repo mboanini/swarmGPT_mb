@@ -18,6 +18,13 @@ sandbox/
 /video
 site
 
+# ROS2 build artifacts
+install/
+log/
+submodules/vicon_ws/build/
+submodules/vicon_ws/install/
+submodules/vicon_ws/log/
+
 # submodules
 crazyswarm
 axswarm
@@ -29,9 +36,19 @@ swarm_gpt/core/motion_primitives_addition.py
 swarm_gpt/data/prompts_no_music_addition.yaml
 swarm_gpt/core/agent_b/prompt/write_stage_prompt_original.py
 
-install/
-log/
-build/
-
 submodules/crazyswarm2/crazyflie/deps/crazyflie_tools/
 submodules/vicon_ws/src/motion_capture_tracking/
+
+# submodules
+submodules/crazyswarm2/ros_ws/install/
+submodules/crazyswarm2/ros_ws/build/
+submodules/crazyswarm2/ros_ws/log/
+submodules/crazyswarm2/ros_ws/install/**
+submodules/crazyswarm2/ros_ws/build/**
+submodules/crazyswarm2/ros_ws/log/**
+**/COLCON_IGNORE
+**/.built_by
+
+# Generated simulation plots
+deviazione_sicurezza.png
+phase1_*.png

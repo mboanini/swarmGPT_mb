@@ -8,10 +8,11 @@ from datetime import datetime
 from pathlib import Path
 
 import fire
+import sys
+sys.path.append('/data/home/crazyflie/Documents/swarmGPT_mb/')
 
 from swarm_gpt.core import AppBackend
 from swarm_gpt.ui import create_ui
-from swarm_gpt.utils import get_ros_package_path
 
 
 def mklog_date(path: Path) -> Path:
@@ -45,15 +46,9 @@ def main(
     if "OPENAI_API_KEY" not in os.environ:
         raise RuntimeError("OPENAI_API_KEY environment variable required, has not been set")
     # Get a list of all music titles available in the music directory
-    # music_dir = Path(__file__).resolve().parents[1] / "music"
+    music_dir = Path(__file__).resolve().parents[1] / "music"
     
-    # submodules/crazyswarm/ros_ws/src/crazyswarm/launch/crazyflies.yaml
-    try:
-        crazyswarm_path = get_ros_package_path("crazyswarm", heuristic_search=True)
-        config_file = crazyswarm_path / "launch/crazyflies.yaml"
-    except Exception:
-        logging.warning("crazyswarm not found. Using default simulation config.")
-        config_file = Path(__file__).resolve().parent / "data/sim_crazyflies.yaml"
+    config_file = Path(__file__).resolve().parents[1] / "config" / "crazyflies.yaml"
 
     # Model IDs: "gpt-4o-2024-05-13", "gpt-3.5-turbo-0125", "gpt-4o-2024-05-13"
     backend = AppBackend(

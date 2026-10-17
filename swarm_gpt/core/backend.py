@@ -224,7 +224,7 @@ class AppBackend:
         # Initialize drone control elements
         self.waypoints = None # High-level LLM commands
         self.splines: dict = {} # Low-level optimized commands from axswarm
-        self.drone_controller = DroneController(20) # Controller for the Crazyflie drones
+        self.drone_controller = DroneController(10) # Controller for the Crazyflie drones
         # Initialize chat elements
         self.choreographer = Choreographer(
             config_file=config_file,
@@ -469,20 +469,30 @@ class AppBackend:
             cfs = {k: v for k, v in cfs.items() if k in drone_ids}
             self.drone_controller.swarm.allcfs.crazyfliesById = cfs
 
-        for i, drone in enumerate(self.drone_controller.swarm.allcfs.crazyfliesById.values()):
-            drone.setLEDColor(*colors[i % len(colors)])
+        # for i, drone in enumerate(self.drone_controller.swarm.allcfs.crazyfliesById.values()):
+        #     drone.setLEDColor(*colors[i % len(colors)])
 
-        original_song = self.music_manager.song
-        duration = next(iter(self.waypoints.values()))[-1, 0]
-        try:
-            self.music_manager.song = original_song + "[deploy]"
-        except AssertionError:
-            pass
+        # original_song = self.music_manager.song
+        print(self.waypoints)
+        
+        # duration = next(iter(self.waypoints.values()))[-1, 0]
+        duration = float(np.max(self.waypoints["time"][:, -1]))
+        # try:
+        #     self.music_manager.song = original_song + "[deploy]"
+        # except AssertionError:
+        #     pass
+        self.drone_controller.arm(True)
         self.drone_controller.takeoff(target_height=1.0, duration=3.0)
-        self.music_manager.play()
-        self.drone_controller.run_spline_trajectories(self.splines, duration=duration)
-        self.drone_controller.land()
-        self.music_manager.song = original_song
+        self.drone_controller.move_to_initial_positions(height=1.0, duration=3.0)
+        #self.music_manager.play()
+        # self.drone_controller.run_spline_trajectories(self.splines, duration=duration)
+        try:
+            self.drone_controller.run_spline_trajectories(self.splines, duration=duration)
+        finally:
+            self.drone_controller.land_full_state(landing_height=0.05, duration=6.0)
+        
+        # self.drone_controller.land()
+        # self.music_manager.song = original_song
         logger.info("Deployment successful")
 
     def load_preset(self, preset_id: str) -> list[dict[str, str]]:
