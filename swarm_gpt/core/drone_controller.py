@@ -46,6 +46,11 @@ class DroneController:
         if not self._ros_running:
             logger.warning("ROS is not running. The drone controller will not be initialized.")
             return
+        if pycrazyswarm is None: 
+            logger.warning("ROS is running but pycrazyswarm was not found. " 
+                            "The drone controller will not be initialized.")
+            self._ros_running = False
+            return
         # Disable signals to prevent rospy from silently ignoring SIGINT
         cfg_path = get_ros_package_path("crazyswarm") / "launch/crazyflies.yaml"
         logger.info("Initializing crazyswarm")

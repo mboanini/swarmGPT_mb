@@ -45,7 +45,7 @@ def main(
     if "OPENAI_API_KEY" not in os.environ:
         raise RuntimeError("OPENAI_API_KEY environment variable required, has not been set")
     # Get a list of all music titles available in the music directory
-    music_dir = Path(__file__).resolve().parents[1] / "music"
+    # music_dir = Path(__file__).resolve().parents[1] / "music"
     
     # submodules/crazyswarm/ros_ws/src/crazyswarm/launch/crazyflies.yaml
     try:

@@ -3,6 +3,8 @@
 import logging
 import sys
 
+import rospkg
+
 from swarm_gpt.utils.utils import get_ros_package_path
 
 logger = logging.getLogger(__name__)
@@ -11,19 +13,14 @@ logger = logging.getLogger(__name__)
 try:
     import pycrazyswarm  # noqa: F401
 except ImportError:
-    # path = get_ros_package_path("crazyswarm", heuristic_search=True)
-    # pycrazyswarm_path = path / "scripts"
-    # if str(pycrazyswarm_path) not in sys.path:
-    #     sys.path.insert(0, str(pycrazyswarm_path))
-
-    # import pycrazyswarm  # noqa: F401
     try:
         path = get_ros_package_path("crazyswarm", heuristic_search=True)
         pycrazyswarm_path = path / "scripts"
         if str(pycrazyswarm_path) not in sys.path:
             sys.path.insert(0, str(pycrazyswarm_path))
+
         import pycrazyswarm  # noqa: F401
-    except Exception:
+    except (ImportError, rospkg.common.ResourceNotFound):
         logger.warning("pycrazyswarm not found. Mocking with None (simulation-only mode).")
         pycrazyswarm = None
 

@@ -20,7 +20,6 @@ from swarm_gpt.core._llm_client import client
 from swarm_gpt.core.motion_primitives import motion_primitives as motion_primitives_collection
 from swarm_gpt.core.motion_primitives import primitive_by_name
 from swarm_gpt.exception import LLMFormatError, LLMPlanError, LLMResponseProcessingError, LLMException
-# from swarm_gpt.core.agent2 import Agent2
 from swarm_gpt.core.router import Router
 
 if TYPE_CHECKING:
@@ -29,7 +28,7 @@ if TYPE_CHECKING:
 # client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # moved to swarm_gpt/core/_llm_client.py
 logger = logging.getLogger(__name__)
 
-STEP_DURATION = 0.5  # seconds per default tick, and the unit PLAN(n) counts in
+STEP_DURATION = 0.5  # seconds per default tick
 
 
 def _is_steps_based(fn_name: str) -> bool:
@@ -78,71 +77,22 @@ class Choreographer:
         self.num_drones = 0
         self.messages = []
         self._generated_yaml = Path(__file__).resolve().parents[1] / "data/prompt_generated_primitives.yaml"
-        # self.agent2 = Agent2(
-        #     call_llm_fn=self._call_openai,
-        #     prompts_path=Path(__file__).resolve().parents[1] / "data/prompt_agent2.yaml"
-        # )
         self.router = Router(
             primitives_path=Path(__file__).resolve().parents[1] / "data/primitives.yaml",
             openai_client=client
         )
         # Load prompts from file
-        # prompt = "prompts_no_music"
         prompt = "prompts_prim" if self.use_motion_primitives else "prompts_no_music"
         with open(Path(__file__).resolve().parents[1] / f"data/{prompt}.yaml", "r") as f:
             self.prompts = yaml.safe_load(f)
-        # prompt_agent_one = "prompt_agent1"
-        # with open(Path(__file__).resolve().parents[1] / f"data/{prompt_agent_one}.yaml", "r") as f:
-        #     self.prompts_a1 = yaml.safe_load(f)
         self.load_drone_config(config_file)
         # Limits define boundaries of permissible flying area
         self.lim_lower = np.array(self.settings["axswarm"]["pos_min"])
         self.lim_upper = np.array(self.settings["axswarm"]["pos_max"])
         assert len(self.lim_lower) == 3 and len(self.lim_upper) == 3, "Limits must be 3D"
 
-    # def analyze_command(self, command: str) -> dict:
-    #     # client: OpenAI, model: str = "gpt-4o"
-    #     """
-    #     Agent 1: Analyze a natural language command.
-    #     Returns structured JSON with routing decision and constraints.
-    #     """
-    #     msgs = []
-    #     msgs.append({"role": "system", "content": self.prompts_a1["system"]})
-    #     msgs.append({"role": "user", "content": f"Analyze this drone swarm command:\n\n{command}"})
-    #     response = self._call_openai(msgs)
-
-    #     # response = client.chat.completions.create(
-    #     #     model=self._model_id,
-    #     #     messages=[
-    #     #         {"role": "system", "content": ANALYZER_SYSTEM},
-    #     #         {"role": "user", "content": f"Analyze this drone swarm command:\n\n{command}"}
-    #     #     ],
-    #     #     temperature=0.1,
-    #     #     response_format={"type": "json_object"},
-    #     # )
-
-    #     result = json.loads(response)
-    #     print("Agent 1 Result:", result)
-    #     result["original_command"] = command
-    #     return result
-
     def analyze_command(self, command: str) -> dict:
-        # """Agent 1: Analyze a natural language command."""
-        # msgs = [
-        #     {"role": "system", "content": self.prompts_a1["system"]},
-        #     {"role": "user", "content": f"Analyze this drone swarm command:\n\n{command}"}
-        # ]
-        # response = self._call_openai(msgs)
-        # # Strip markdown code blocks if present
-        # if "```json" in response:
-        #     response = response.split("```json")[1].split("```")[0].strip()
-        # elif "```" in response:
-        #     response = response.split("```")[1].split("```")[0].strip()
-        
-        # result = json.loads(response)
-        # result["original_command"] = command
-        # return result
-        """Route a natural language command using semantic router."""
+        """Route a natural language command using an only-llm router."""
         return self.router.route(command)
 
     def format_initial_prompt(self, user_command: str) -> list[dict[str, str]]:

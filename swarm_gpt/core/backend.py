@@ -208,20 +208,31 @@ class AppBackend:
         model_id: str = "gpt-4o-2024-05-13",
         use_motion_primitives: bool = False,
     ):
+        """Initialize the backend by loading the music files and initializing the choreographer.
+
+        Args:
+            config_file: Path to the config file.
+            strict_processing: Flag to raise an error on waypoint collisions.
+            strict_drone_match: Flag to raise an error when preset drones do not match the current
+                swarm.
+            model_id: The OpenAI GPT model ID.
+            use_motion_primitives: If we want LLM to use motion primitives for choreography
+        """
         self.root_path = Path(__file__).resolve().parents[2]
         with open(self.root_path / "swarm_gpt/data/settings.yaml", "r") as f:
             self.settings = yaml.safe_load(f)
-
-        self.waypoints = None
-        self.splines: dict = {}
-        self.drone_controller = DroneController(20)
+        # Initialize drone control elements
+        self.waypoints = None # High-level LLM commands
+        self.splines: dict = {} # Low-level optimized commands from axswarm
+        self.drone_controller = DroneController(20) # Controller for the Crazyflie drones
+        # Initialize chat elements
         self.choreographer = Choreographer(
             config_file=config_file,
             model_id=model_id,
             use_motion_primitives=use_motion_primitives,
         )
         self.mode: Literal["preset", "real"] = "real"
-        self._preset: None | str = None
+        # self._preset: None | str = None
         self._strict_processing = strict_processing
         self._strict_drone_match = strict_drone_match
 
@@ -229,7 +240,7 @@ class AppBackend:
         self._viz_proc: subprocess.Popen | None = None
         self._viz_data_path: str | None = None   # path del file pickle temporaneo
 
-    # ── Subprocess visualizer helpers ─────────────────────────────────────────
+    # Subprocess visualizer helpers 
 
     def _stop_viz(self) -> None:
         """Terminate the visualizer subprocess and clean up the temp file."""
@@ -283,11 +294,9 @@ class AppBackend:
         )
         logger.info("Visualizer subprocess started (pid=%d).", self._viz_proc.pid)
 
-    # ── Core methods ──────────────────────────────────────────────────────────
-
-    @property
-    def presets(self) -> list[str]:
-        return [s.name for s in (self.root_path / "swarm_gpt/data/presets").glob("*")]
+    # @property
+    # def presets(self) -> list[str]:
+    #     return [s.name for s in (self.root_path / "swarm_gpt/data/presets").glob("*")]
 
     # @self_correct(n_retries=2)
     # def initial_prompt(self, text: str, *, response: str | None = None) -> list[dict[str, str]]:
