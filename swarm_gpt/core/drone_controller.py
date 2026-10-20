@@ -41,7 +41,7 @@ class DroneController:
         """
         self.freq = freq
         self._ros_running = False
-
+        
         # Initialize rclpy so we can check if crazyflie_server is running
         # if rclpy.ok() + check if crazyflie_server in exec
         try:
@@ -50,7 +50,7 @@ class DroneController:
         except Exception:
             logger.warning("ROS 2 is not running. The drone controller will not be initialized.")
             return
-
+        
         # Non-blocking check: skip Crazyswarm init if crazyflie_server is not up
         # (Crazyswarm blocks indefinitely on wait_for_service() if the server is absent)
         check_node = rclpy.create_node("swarmgpt_init_check")
@@ -60,7 +60,7 @@ class DroneController:
             running_nodes = []
         finally:
             check_node.destroy_node()
-
+        
         # if "crazyflie_server" not in running_nodes:
         #     logger.warning("crazyflie_server not running. The drone controller will not be initialized.")
         #     return
@@ -71,17 +71,20 @@ class DroneController:
         rclpy.init = lambda *a, **kw: None
         try:
             logger.info("Initializing crazyswarm2")
+            # print('before')
             self.swarm = pycrazyswarm.Crazyswarm()
+            # print('after')
             self._ros_running = True
         except Exception as e:
             logger.warning(f"Failed to initialize crazyswarm2: {e}")
         finally:
             rclpy.init = _orig_init
 
+
         if not self._ros_running:
             return
 
-
+        
         self._node = Node("swarm_gpt_controller")
         # self.cmd_pos_pub = {
         #     # rospy.Publisher(...) -> self._node.create_publisher(...)

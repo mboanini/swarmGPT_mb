@@ -36,12 +36,13 @@ def mklog_date(path: Path) -> Path:
 def main(
     strict: bool = True, model_id: str = "gpt-4o-2024-05-13", use_motion_primitives: bool = False
 ):
+    
     """Build the gui and launch the demo."""
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)  # Suppress httpx info messages
     logging.getLogger("jax").setLevel(logging.WARNING)
     #logging.getLogger("swarm_gpt").setLevel(logging.DEBUG)
-
+    
     # Check if the OpenAI API key is present
     if "OPENAI_API_KEY" not in os.environ:
         raise RuntimeError("OPENAI_API_KEY environment variable required, has not been set")
@@ -49,7 +50,7 @@ def main(
     music_dir = Path(__file__).resolve().parents[1] / "music"
     
     config_file = Path(__file__).resolve().parents[1] / "config" / "crazyflies.yaml"
-
+    
     # Model IDs: "gpt-4o-2024-05-13", "gpt-3.5-turbo-0125", "gpt-4o-2024-05-13"
     backend = AppBackend(
         config_file=config_file,

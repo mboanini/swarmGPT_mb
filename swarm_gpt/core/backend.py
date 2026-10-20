@@ -224,6 +224,7 @@ class AppBackend:
         # Initialize drone control elements
         self.waypoints = None # High-level LLM commands
         self.splines: dict = {} # Low-level optimized commands from axswarm
+        
         self.drone_controller = DroneController(10) # Controller for the Crazyflie drones
         # Initialize chat elements
         self.choreographer = Choreographer(
@@ -235,7 +236,7 @@ class AppBackend:
         # self._preset: None | str = None
         self._strict_processing = strict_processing
         self._strict_drone_match = strict_drone_match
-
+        
         # Subprocess visualizer state
         self._viz_proc: subprocess.Popen | None = None
         self._viz_data_path: str | None = None   # path del file pickle temporaneo

@@ -59,3 +59,8 @@ wave:
     two-dimensional elastic surface with bounded edges; the disturbance at each point
     is governed by the wave equation.
   n_args: 5
+form_line:
+  description: Arranges all drones into a straight line formation along a specified
+    axis in the 3D space. The spacing between adjacent drones can be adjusted to vary
+    the length of the line.
+  n_args: 4

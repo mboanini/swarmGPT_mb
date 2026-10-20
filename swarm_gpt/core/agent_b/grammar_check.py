@@ -5,6 +5,7 @@ check: runs pylint on the staging file and returns a list of error strings.
 """
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 _ERROR_PATTERN = re.compile(r"(.*?):(\d+):(\d+): (E\w+): (.*?) \((.*?)\)")
@@ -25,7 +26,14 @@ def write_staging_file(path: Path, body: str) -> None:
 def check(path: Path) -> list[str]:
     """Run pylint --errors-only on the staging file. Returns a list of error strings."""
     result = subprocess.run(
-        [ "pylint", "--errors-only", "--msg-template={path}:{line}:{column}: {msg_id}: {msg} ({symbol})", str(path), ],
+        [
+            sys.executable,
+            "-m",
+            "pylint",
+            "--errors-only",
+            "--msg-template={path}:{line}:{column}: {msg_id}: {msg} ({symbol})",
+            str(path),
+        ],
         capture_output=True,
         text=True,
         check=False,
