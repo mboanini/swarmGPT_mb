@@ -1,7 +1,1 @@
-content: |2-
-    form_line(axis, spacing, depth, time_to_finish_s)
-      - Arranges all drones into a straight line formation along a specified axis in the 3D space. The spacing between adjacent drones can be adjusted to vary the length of the line.
-      - {axis}: Specifies the axis ('x', 'y', 'z') along which to form the line.
-      - {spacing}: Spacing in cm between consecutive drones in the line.
-      - {depth}: The fixed coordinate in cm for maintaining the line's depth (z when sliding along x and y, or other similar configurations).
-      - {time_to_finish_s}: Total time allotted to complete the line formation.
+content: |-

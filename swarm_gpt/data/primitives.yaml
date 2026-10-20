@@ -1,20 +1,21 @@
 move:
-  description: Moves drones to absolute position
+  description: Moves a single drone, identified by its id, to an absolute (x, y, z) position.
   n_args: 4
 move_z:
-  description: Moves drones along the z axis by a distance; positive moves them up,
-    negative moves them down.
+  description: Moves a list of drones along the z axis by a distance; positive moves
+    them up, negative moves them down. The height is kept between 100 and 200 cm.
   n_args: 2
 rotate:
-  description: Rotates all drones by an angle along an axis.
-  n_args: 2
+  description: Rotates all drones by an angle around the x, y or z axis through the arena origin.
+  n_args: 3
 form_circle:
-  description: Arranges drones into a circle formation at a given height; the radius
-    is decided by the number of drones in the list — a bigger circle for more drones.
-  n_args: 2
+  description: Arranges the selected drones into a circle at a given height, centered
+    on the arena origin; the radius depends on the number of drones, and with many
+    drones a second concentric circle is added.
+  n_args: 3
 center:
-  description: Calculates the geometric center of the given drones' current positions
-    and moves all of them to that calculated center position.
+  description: Gathers the drones into a compact circle around the arena origin at
+    the swarm's average height.
   n_args: 1
 swap:
   description: Swaps positions of two drones
@@ -22,28 +23,29 @@ swap:
 form_star:
   description: Creates a star in the z-plane, defined by two concentric circles in
     staggered angles with different radii, at a given height.
-  n_args: 3
+  n_args: 4
 form_cone:
-  description: Creates a cone using concentric circles of different radii stacked
-    at increasing height, with each layer adding more drones. Can optionally be inverted,
-    which is more expressive and dynamic.
-  n_args: 3
+  description: Forms a cone from concentric circles, each layer holding more drones
+    than the previous one. By default the tip is at the top and layers widen going
+    down; if inverted, the tip is at the bottom and layers widen going up.
+  n_args: 4
 polygon:
-  description: Arranges drones in a regular polygon such as triangle, square, pentagon,
-    hexagon
-  n_args: 2
+  description: Arranges drones in a regular polygon with n sides at a given height,
+    such as a triangle, square, pentagon, hexagon.
+  n_args: 3
 spiral:
   description: Makes all drones move in an outward spiral pattern with the radius
     calculated from the number of drones, over a number of steps at a given height.
   n_args: 2
 spiral_speed:
-  description: Has the same effect as spiral, but increases the spiral's radius over
-    the number of steps. Speed defines the angle by which drones rotate around the
-    center — lower speeds result in slower motion.
+  description: Like spiral, but with control over the rotation - speed sets the total
+    angle in degrees the drones rotate around the center, and increase sets how many
+    times larger the final radius is than the starting one.
   n_args: 4
 helix:
-  description: Makes all drones move in a helix pattern, rising up with each step
-    while orbiting around the center at a radius calculated from the number of drones.
+  description: Makes all drones move in a helix pattern, orbiting around the center
+    at a radius calculated from the number of drones while rising by a total of delta_h
+    over the duration.
   n_args: 3
 twister:
   description: Makes all drones move into an upside-down cone pattern and rotate at
@@ -51,16 +53,12 @@ twister:
     drones makes a more compact cone.
   n_args: 3
 zig_zag:
-  description: Moves all drones in a zigzag pattern, with a horizontal displacement
-    per step and a vertical displacement per step.
+  description: Moves all drones in a zigzag pattern, moving the drones back and forth
+    diagonally, alternating direction each step, while rising by a vertical displacement
+    per step.
   n_args: 3
 wave:
   description: Moves all drones in a three-dimensional wave propagating through a
     two-dimensional elastic surface with bounded edges; the disturbance at each point
     is governed by the wave equation.
   n_args: 5
-form_line:
-  description: Arranges all drones into a straight line formation along a specified
-    axis in the 3D space. The spacing between adjacent drones can be adjusted to vary
-    the length of the line.
-  n_args: 4
