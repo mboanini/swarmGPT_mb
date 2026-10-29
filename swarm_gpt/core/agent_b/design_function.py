@@ -16,7 +16,7 @@ _SIGNATURE = ["params", "swarm_pos", "tstart", "tend", "limits"]
 
 
 def _check_interface(definition: str, name: str, n_args: int) -> None:
-    """Raise ValueError if the Design interface is unusable. Design errors are not sent to Debug."""
+    """Raise ValueError if the Design interface is unusable"""
     function = next(
         n for n in ast.parse(definition).body if isinstance(n, ast.FunctionDef) and n.name == name
     )

@@ -12,7 +12,7 @@ from swarm_gpt.core.agent_b.function_node import State
 from swarm_gpt.core.agent_b.parser import FunctionParser, parse_text
 from swarm_gpt.core.agent_b.prompt import (
     BEHAVIORAL_COMPARISON_PROMPT,
-    CODE_REVIEW_PROMPT,
+    CODE_FIX_PROMPT,
     CONSTRAINTS_TEXT,
     ENV_DES,
     FEW_SHOT_EXAMPLES,
@@ -22,12 +22,9 @@ from swarm_gpt.core.agent_b.prompt import (
 
 logger = logging.getLogger(__name__)
 
-_NOT_SATISFIED_PREFIX = "NOT_SATISFIED"
-
-
 class CodeReview(ActionNode):
     def run(self) -> None:
-        # --- Stage 0: behavioral comparison ---
+        # Stage 0: behavioral comparison
         self.prompt = BEHAVIORAL_COMPARISON_PROMPT.format(
             task_des        = TASK_DES,
             user_command    = self._node.user_command,
@@ -39,15 +36,15 @@ class CodeReview(ActionNode):
         )
         response = self._call_llm()
 
-        if not response.strip().startswith(_NOT_SATISFIED_PREFIX):
+        if not response.strip().startswith("NOT_SATISFIED"):
             logger.info("CodeReview/BehavioralComparison: SATISFIED — no changes")
             return
 
-        mismatch_list = response.strip()[len(_NOT_SATISFIED_PREFIX):].lstrip(":").strip()
+        mismatch_list = response.strip()[len("NOT_SATISFIED"):].lstrip(":").strip()
         logger.info(f"CodeReview/BehavioralComparison: NOT_SATISFIED — {mismatch_list[:120]}")
 
-        # --- Stage 1: targeted fix ---
-        self.prompt = CODE_REVIEW_PROMPT.format(
+        # Stage 1: code fix
+        self.prompt = CODE_FIX_PROMPT.format(
             task_des            = TASK_DES,
             env_des             = ENV_DES,
             user_command        = self._node.user_command,

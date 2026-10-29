@@ -35,7 +35,7 @@ class Pipeline:
         return nodes
 
     def _run_one(self, cmd: str) -> FunctionNode:
-        # --- Describe ---
+        # Describe
         logger.info(f"Describe stage: '{cmd}'")
         name, description = self._describer.run(cmd)
         is_valid, errors = self._name_desc_validator.validate(name, description)
@@ -46,22 +46,22 @@ class Pipeline:
         node = FunctionNode(name=name, description=description, user_command=cmd)
         staging_path = _STAGING_DIR / f"{name}.py"
 
-        # --- Design ---
+        # Design
         logger.info(f"Design stage: {name}")
         self._designer.setup(node)
         self._designer.run()
 
-        # --- Write ---
+        # Write
         logger.info(f"Write stage: {name}")
         self._writer.setup(node)
         self._writer.run()
 
-        # --- CodeReview ---
+        # CodeReview
         logger.info(f"CodeReview stage: {name}")
         self._reviewer.setup(node)
         self._reviewer.run()
 
-        # --- Certification: StaticCheck, then RuntimeCheck; Debug repairs and we start over ---
+        # Certification: StaticCheck + RuntimeCheck + Debug repairs
         test_params = prepare_test_params(node.definition, node.n_args)  # inferred once, reused
         if test_params is None:
             raise RuntimeError(f"Unable to prepare runtime test parameters for '{name}'")

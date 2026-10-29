@@ -6,12 +6,10 @@ import re
 from tenacity import retry, stop_after_attempt, wait_random_exponential
 
 from swarm_gpt.core._llm_client import client
-from swarm_gpt.core.agent_b.runtime_check import _TEST_SWARM_POS
 
 logger = logging.getLogger(__name__)
 
 _MODEL = "gpt-4o"
-_N_TEST_DRONES = _TEST_SWARM_POS.shape[0]
 
 _PROMPT = """
 The `params` argument of a motion primitive is described as follows:
@@ -53,15 +51,14 @@ def _call_llm(prompt: str) -> str:
 
 def infer(
     function_definition: str,
-    n_drones: int = _N_TEST_DRONES,
-    tstart: float = 0.0,
-    tend: float = 5.0,
+    n_drones: int,
+    tstart: float,
+    tend: float,
     case_index: int = 0,
 ) -> tuple | None:
-    """Call the LLM to generate a test_params tuple from the function interface.
+    """Call the LLM to generate a test_params tuple from the function interface
 
     Returns a tuple on success, None if the LLM call or parsing fails
-    (the caller decides how to handle failed inference).
     """
     params_description = _extract_params_description(function_definition)
     prompt = _PROMPT.format(
@@ -86,7 +83,7 @@ def infer(
         value = ast.literal_eval(raw)
         if not isinstance(value, tuple):
             value = (value,)
-        logger.info(f"InferTestParams: → {value}")
+        logger.info(f"InferTestParams: -> {value}")
         return value
     except (ValueError, SyntaxError) as exc:
         logger.warning(f"InferTestParams: could not parse '{raw}' ({exc})")

@@ -3,7 +3,7 @@ from .env_description_prompt import ENV_DES
 from .robot_api_prompt import FEW_SHOT_EXAMPLES, ROBOT_API_DESC
 from .task_description_prompt import TASK_DES
 
-__all__ = ["BEHAVIORAL_COMPARISON_PROMPT", "CODE_REVIEW_PROMPT"]
+__all__ = ["BEHAVIORAL_COMPARISON_PROMPT", "CODE_FIX_PROMPT"]
 
 BEHAVIORAL_COMPARISON_PROMPT = """
 
@@ -13,9 +13,9 @@ BEHAVIORAL_COMPARISON_PROMPT = """
 ## Task:
 Please summarize the main functions and boundary conditions that `{function_name}` should implement,
 based on this description:
-** Description: ** {function_des}
+Description: {function_des}
 and the user original instruction:
-** User original instruction: ** {user_command}
+User original instruction: {user_command}
 
 Then read the code below and describe what functions the code actually completes and how the key steps are implemented:
 ```python
@@ -41,7 +41,7 @@ Do not propose a fix. Only judge consistency.
 
 """.strip()
 
-CODE_REVIEW_PROMPT = """
+CODE_FIX_PROMPT = """
 
 ## Background:
 {task_des}
@@ -72,9 +72,9 @@ There are the basic descriptions of the environment.
 ```
 
 ## These are the description and the interface of the primitive to review - DO NOT modify these:
-**Description:** {function_des}
+Description: {function_des}
 
-**Interface (DO NOT modify — signature, # n_args comment, and docstring are fixed):**
+Interface (DO NOT modify — signature, # n_args comment, and docstring are fixed):
 ```python
 {function_definition}
 ```
@@ -93,15 +93,6 @@ line(s) of code and explain the correction you will make. Write code
 directly here without ```python``` fences — those are reserved for the
 final function block below.
 
-Modified function:
-```python
-def {function_name}(params, swarm_pos, tstart, tend, limits):
-    '''
-    ... (docstring unchanged, content may be updated)
-    '''
-    ... (corrected body)
-```
-
 ## Rules
 - Fix ONLY the mismatches listed above — nothing else. Do not rewrite
   parts of the function that were not flagged.
@@ -114,4 +105,13 @@ def {function_name}(params, swarm_pos, tstart, tend, limits):
 - If resolving a mismatch requires touching code unrelated to it, explain
   why in the Reasoning section rather than silently expanding the change.
 - No ```python``` fences anywhere except inside the Modified function block.
+
+Modified function:
+```python
+def {function_name}(params, swarm_pos, tstart, tend, limits):
+    '''
+    ... (docstring unchanged, content may be updated)
+    '''
+    ... (corrected body)
+```
 """.strip()

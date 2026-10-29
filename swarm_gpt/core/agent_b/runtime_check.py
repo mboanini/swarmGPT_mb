@@ -9,28 +9,8 @@ from swarm_gpt.core.agent_b.runtime_scenario import RuntimeScenario
 
 _MIN_DRONE_DISTANCE_CM = 40.0
 
-_TEST_SWARM_POS = np.array([
-    [-50., -50., 100.],
-    [ 50., -50., 100.],
-    [ 50.,  50., 100.],
-    [-50.,  50., 100.],
-], dtype=float)
 
-_TEST_TSTART = 0.0
-_TEST_TEND   = 5.0
-_TEST_LIMITS = {
-    "lower": np.array([-2., -2.,  0.]),
-    "upper": np.array([ 2.,  2.,  2.]),
-}
-
-_DEFAULT_SCENARIO = RuntimeScenario(
-    swarm_pos = _TEST_SWARM_POS,
-    tstart = _TEST_TSTART,
-    tend = _TEST_TEND,
-    limits = _TEST_LIMITS,
-)
-
-def run(body: str, func_name: str, test_params: tuple, scenario: RuntimeScenario | None = None,) -> list[str]:
+def run(body: str, func_name: str, test_params: tuple, scenario: RuntimeScenario) -> list[str]:
     """Execute the function with test inputs. Returns a list of error strings (empty = success)."""
     namespace = {
         "np":                    np,
@@ -40,9 +20,6 @@ def run(body: str, func_name: str, test_params: tuple, scenario: RuntimeScenario
         "_formation_arrival_time": _mp_module._formation_arrival_time,
         "_formation_waypoints":    _mp_module._formation_waypoints,
     }
-
-    if scenario is None:
-        scenario = _DEFAULT_SCENARIO
 
     try:
         exec(body, namespace)  # noqa: S102

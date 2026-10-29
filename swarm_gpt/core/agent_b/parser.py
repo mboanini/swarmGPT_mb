@@ -1,7 +1,7 @@
 import ast
 import re
 
-_SHADOWED_NAMES = {"_sanitize_drone_ids", "_assign_positions", "_form_grid"}
+_PRE_IMPORTED_HELPERS = {"_sanitize_drone_ids", "_assign_positions", "_form_grid"}
 
 
 def parse_text(text: str, lang: str = "python") -> str:
@@ -16,15 +16,14 @@ def parse_text(text: str, lang: str = "python") -> str:
     return matches[0].strip()
 
 
-# Design docstring line declaring the params tuple: `params: tuple[...] — (name1, name2, ...)`.
-# Same format primitive_writer reads to describe the primitive to the Router.
+# Design docstring line declaring the params tuple: `params: tuple[...] — (name1, name2, ...)`
 _PARAMS_LINE = re.compile(r"^\s*params\s*:\s*tuple\[.*\]\s*[—-]+\s*\((.*)\)\s*$", re.MULTILINE)
 
 
 def param_names(definition: str, func_name: str) -> list[str]:
-    """Return the ordered parameter names declared in the Design docstring.
+    """Return the ordered parameter names declared in the Design docstring
 
-    Raises ValueError if the declaration is missing or the names are not unique identifiers.
+    Raises ValueError if the declaration is missing or the names are not unique identifiers
     """
     docstring = ""
     for node in ast.parse(definition).body:
@@ -44,7 +43,6 @@ class FunctionParser:
 
     Uses ast for validation and function name extraction, but preserves
     the raw code string so that the # n_args: N comment is not lost
-    (ast.unparse strips comments).
     """
 
     def __init__(self):
@@ -76,13 +74,13 @@ class FunctionParser:
             )
 
     def check_n_args(self) -> None:
-        """Verify the declared `# n_args: N` matches the actual arity of `params`.
+        """Verify the declared `# n_args: N` matches the actual arity of `params`
 
         Finds the `<names> = params` destructuring assignment via ast and counts the 
-        names on its left-hand side, rather than
-        trusting N as self-reported by the LLM. Raises ValueError on any mismatch,
-        including when no proper tuple-destructuring assignment is found at all (e.g.
-        `x = params` or `x = params[0]`, which are themselves implementation bugs).
+        names on its left-hand side, rather than trusting N as self-reported by the LLM. 
+        Raises ValueError on any mismatch, including when no proper tuple-destructuring 
+        assignment is found at all (e.g. `x = params` or `x = params[0]`, which are 
+        themselves implementation bugs).
         """
         tree = ast.parse(self._code)
         unpacks = [
@@ -104,7 +102,7 @@ class FunctionParser:
                 f"({actual} name(s) unpacked from params)."
             )
 
-    def strip_shadowed_helpers(self) -> None:
+    def strip_imported_helpers(self) -> None:
         """Remove top-level redefinitions of module-level helpers that are already
         injected into every primitive's scope. Keeps any other helper functions."""
         tree = ast.parse(self._code)
@@ -112,7 +110,7 @@ class FunctionParser:
         to_remove = [
             (n.lineno - 1, n.end_lineno)
             for n in tree.body
-            if isinstance(n, ast.FunctionDef) and n.name in _SHADOWED_NAMES
+            if isinstance(n, ast.FunctionDef) and n.name in _PRE_IMPORTED_HELPERS
         ]
         for start, end in reversed(to_remove):
             lines[start:end] = []

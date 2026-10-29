@@ -3,7 +3,6 @@ import inspect
 from swarm_gpt.core.motion_primitives import move, rotate, center, swap, spiral_speed, helix, form_circle, zig_zag, form_star, polygon
 
 # Description of helpers injected at runtime into every primitive's scope.
-# These are NOT imported by the generated function — they are already available.
 ROBOT_API_DESC = """\
 
 def _sanitize_drone_ids(drone_ids: list[int], n_drones: int) -> list[int]:
@@ -54,8 +53,7 @@ def _formation_waypoints(target_pos, current_pos, tstart, tend, time_to_finish_s
     #   final_pos = swarm_pos.copy(); final_pos[drone_ids] = final\
 """.strip()
 
-# Source code of three representative existing primitives, loaded at import time.
-# GenSwarm equivalent: other_functions_str built from skill_tree.filtered_functions().
+# Source code of representative existing primitives - loaded at import time
 FEW_SHOT_EXAMPLES: str = "\n\n".join(
     inspect.getsource(fn) for fn in [move, rotate, center, swap, spiral_speed, helix, form_circle, zig_zag, form_star, polygon]
 )

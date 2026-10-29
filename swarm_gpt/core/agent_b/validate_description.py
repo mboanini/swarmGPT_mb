@@ -39,15 +39,7 @@ class ValidateNameDesc:
         has_domain_term = any(t in desc.lower() for t in self.DOMAIN_TERMS)
         return self.desc_min_words <= word_count <= self.desc_max_words and has_domain_term
 
-    # def _name_in_description(self, name: str, desc: str) -> bool:
-    #     tokens = [t for t in name.split("_") if len(t) > 3]
-    #     if not tokens:
-    #         return True  # name troppo corto per il check --> non penalizzare
-    #     return any(t in desc.lower() for t in tokens)
-
     def validate(self, name: str, desc: str) -> tuple[bool, list[str]]:
-        # name = result.get("name", "")
-        # desc = result.get("description", "")
         print(f"name: {name}")
         print(f"desc: {desc}")
         errors = []
@@ -57,7 +49,7 @@ class ValidateNameDesc:
 
         if self._is_duplicate(name):
             errors.append(f"Duplicate name: '{name}'")
-        elif self._is_too_similar(name):  # elif: inutile se già duplicato esatto
+        elif self._is_too_similar(name):  # elif: redundant if it's already an exact duplicate
             errors.append(f"Too similar to existing name: '{name}'")
 
         if not self._valid_description(desc):
@@ -65,8 +57,5 @@ class ValidateNameDesc:
                 f"Description must be {self.desc_min_words}–{self.desc_max_words} words "
                 f"and contain a domain term {self.DOMAIN_TERMS}"
             )
-
-        # if not self._name_in_description(name, desc):
-        #     errors.append(f"Name '{name}' semantically disconnected from description")
 
         return len(errors) == 0, errors

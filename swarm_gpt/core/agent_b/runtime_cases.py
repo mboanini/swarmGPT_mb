@@ -8,8 +8,8 @@ from swarm_gpt.core.agent_b.runtime_scenario import RuntimeScenario
 
 def _scenarios() -> list[RuntimeScenario]:
     limits = {
-        "lower": np.array([-2.0, -2.0, 0.0]),
-        "upper": np.array([2.0, 2.0, 2.0]),
+        "lower": np.array([-1.5, -1.5, 0.25]),
+        "upper": np.array([1.5, 1.5, 1.3]),
     }
 
     scenarios = [

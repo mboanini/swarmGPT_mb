@@ -11,7 +11,7 @@ from swarm_gpt.core.agent_b.parser import param_names
 
 
 def _main_func_body(tree: ast.AST, func_name: str) -> list[ast.stmt]:
-    """Body statements of the named function (restricts checks to target, ignores helpers)."""
+    """Body of the named function"""
     for node in ast.walk(tree):
         if isinstance(node, ast.FunctionDef) and node.name == func_name:
             return node.body
@@ -19,7 +19,7 @@ def _main_func_body(tree: ast.AST, func_name: str) -> list[ast.stmt]:
 
 
 def _find_params_destructuring(body: list[ast.stmt]) -> list[ast.Assign]:
-    """Find all `a, b, c = params` assignments in the function body."""
+    """Find all `a, b, c = params` assignments in the function body"""
     matches = []
     for stmt in body:
         for node in ast.walk(stmt):
@@ -33,7 +33,7 @@ def _find_params_destructuring(body: list[ast.stmt]) -> list[ast.Assign]:
 
 
 def _find_params_index_access(body: list[ast.stmt]) -> list[ast.Subscript]:
-    """Find forbidden `params[i]` subscript accesses."""
+    """Find forbidden `params[i]` subscript accesses"""
     hits = []
     for stmt in body:
         for node in ast.walk(stmt):
@@ -45,7 +45,7 @@ def _find_params_index_access(body: list[ast.stmt]) -> list[ast.Subscript]:
 
 
 def _find_sanitize_and_drone_id_uses(body: list[ast.stmt]) -> tuple[int | None, list[int]]:
-    """Return (line of _sanitize_drone_ids call, lines where drone_ids used as index)."""
+    """Return (line of _sanitize_drone_ids call, lines where drone_ids used as index)"""
     sanitize_line = None
     index_uses = []
     for stmt in body:
@@ -62,7 +62,7 @@ def _find_sanitize_and_drone_id_uses(body: list[ast.stmt]) -> tuple[int | None, 
 
 
 def _find_forbidden_statements(body: list[ast.stmt]) -> list[str]:
-    """Find while loops, raise, and assert statements."""
+    """Find while loops, raise, and assert statements"""
     found = []
     for stmt in body:
         for node in ast.walk(stmt):
@@ -91,32 +91,32 @@ def check(source: str, func_name: str, definition: str) -> list[str]:
 
     failures = []
 
-    # Check 2a: exactly one `a, b, c = params` line, unpacking the Design parameters in order
+    # exactly one `a, b, c = params` line, unpacking the Design parameters in order
     destructurings = _find_params_destructuring(body)
-    if len(destructurings) != 1:
+    if len(desgtructurins) != 1:
         failures.append(
-            f"Check 2: expected exactly 1 'a, b, c = params' line, found {len(destructurings)}"
+            f"Check: expected exactly one 'a, b, c = params' line, found {len(destructurings)}"
         )
     else:
         unpacked = [ast.unparse(elt) for elt in destructurings[0].targets[0].elts]
         try:
             expected = param_names(definition, func_name)
         except ValueError as exc:
-            failures.append(f"Check 2: cannot read the Design parameter declaration: {exc}")
+            failures.append(f"Check: cannot read the Design parameter declaration: {exc}")
         else:
             if unpacked != expected:
                 failures.append(
-                    f"Check 2: params must be unpacked as '{', '.join(expected)} = params' "
+                    f"Check: params must be unpacked as '{', '.join(expected)} = params' "
                     f"(Design order), got '{', '.join(unpacked)} = params'"
                 )
 
-    # Check 2b: no params[i] index access
+    # no params[i] index access
     index_hits = _find_params_index_access(body)
     if index_hits:
         lines = ", ".join(str(n.lineno) for n in index_hits)
-        failures.append(f"Check 2: forbidden params[i] index access at line(s) {lines}")
+        failures.append(f"Check: forbidden params[i] index access at line(s) {lines}")
 
-    # Check 3: only applies when drone_ids appears in the params destructuring
+    # only applies when drone_ids appears in the params destructuring
     has_drone_ids = (
         len(destructurings) == 1
         and any(
@@ -127,17 +127,17 @@ def check(source: str, func_name: str, definition: str) -> list[str]:
     if has_drone_ids:
         sanitize_line, drone_index_uses = _find_sanitize_and_drone_id_uses(body)
         if sanitize_line is None:
-            failures.append("Check 3: drone_ids is in params but _sanitize_drone_ids is never called")
+            failures.append("Check: drone_ids is in params but _sanitize_drone_ids is never called")
         else:
             early = [ln for ln in drone_index_uses if ln < sanitize_line]
             if early:
                 failures.append(
-                    f"Check 3: drone_ids used as index before _sanitize_drone_ids at line(s) {early}"
+                    f"Check: drone_ids used as index before _sanitize_drone_ids at line(s) {early}"
                 )
 
-    # Check 7: no while / raise / assert
+    # no while / raise / assert
     forbidden = _find_forbidden_statements(body)
     if forbidden:
-        failures.append(f"Check 7: forbidden statements: {'; '.join(forbidden)}")
+        failures.append(f"Check: forbidden statements: {'; '.join(forbidden)}")
 
     return failures

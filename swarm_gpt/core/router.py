@@ -2,11 +2,11 @@
 Router for drone swarm commands.
 
 Architecture:
-Direct LLM classification (gpt-4o-mini) — given the full primitive catalog
-(name + description) and the command in one prompt, the LLM decides whether
-each part of the command (it may describe several distinct motions/formations)
-is covered by an existing primitive, and returns the exact wording of every
-part that is NOT covered.
+Direct LLM classification (gpt-4o-mini) - given the full primitive catalog
+(name + description) and the command in one prompt (router_prompt.yaml), 
+the LLM decides whether each part of the command (it may describe several 
+distinct motions/formations) is covered by an existing primitive, and returns 
+the exact wording of every part that is not covered.
 
 Returns:
     {
@@ -124,5 +124,5 @@ class Router:
             status = primitive if primitive else "NOT COVERED"
             print(f"  [router]   part: '{part.get('command')}' -> {status}  ({part.get('reasoning')})")
         missing = [part["command"] for part in parts if part.get("primitive") is None]
-        logger.info("'%s' → parts: %s → missing: %s", command, parts, missing)
+        logger.info("'%s' -> parts: %s -> missing: %s", command, parts, missing)
         return missing

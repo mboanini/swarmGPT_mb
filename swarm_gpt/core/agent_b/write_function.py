@@ -29,6 +29,6 @@ class WriteFunction(ActionNode):
         parser.parse(code)
         parser.check_function_name(self._node.name)
         # parser.check_n_args()
-        parser.strip_shadowed_helpers()
+        parser.strip_imported_helpers()
         self._node.body   = parser.function_definition
         self._node.state  = State.IMPLEMENTED

@@ -10,7 +10,7 @@ user_initial: >
   # Command
   "{command}"
 
-  # Response structure
+  # Note
   First, decide whether the command describes one action or several distinct
   actions (e.g. "form a circle and then explore the area" is two). Modifiers
   like "at height 100" or "at speed 2" are parameters, not separate actions —

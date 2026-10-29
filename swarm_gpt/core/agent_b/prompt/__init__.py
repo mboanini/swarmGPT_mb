@@ -1,4 +1,4 @@
-from .behavioral_comparison_prompt import BEHAVIORAL_COMPARISON_PROMPT, CODE_REVIEW_PROMPT
+from .code_review_prompt import BEHAVIORAL_COMPARISON_PROMPT, CODE_FIX_PROMPT
 from .constraint_prompt import CONSTRAINTS_TEXT
 from .design_stage_prompt import DESIGN_PROMPT
 from .env_description_prompt import ENV_DES
@@ -13,7 +13,7 @@ __all__ = [
     "FEW_SHOT_EXAMPLES",
     "CONSTRAINTS_TEXT",
     "BEHAVIORAL_COMPARISON_PROMPT",
-    "CODE_REVIEW_PROMPT",
+    "CODE_FIX_PROMPT",
     "DESIGN_PROMPT",
     "WRITE_PROMPT",
 ]
