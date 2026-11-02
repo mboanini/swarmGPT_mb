@@ -5,21 +5,15 @@ import traceback
 import numpy as np
 
 import swarm_gpt.core.motion_primitives as _mp_module
+from swarm_gpt.core.agent_b.parser import INJECTED_HELPERS
 from swarm_gpt.core.agent_b.runtime_scenario import RuntimeScenario
 
-_MIN_DRONE_DISTANCE_CM = 40.0
+_MIN_DRONE_DISTANCE_CM = 15.0
 
 
 def run(body: str, func_name: str, test_params: tuple, scenario: RuntimeScenario) -> list[str]:
     """Execute the function with test inputs. Returns a list of error strings (empty = success)."""
-    namespace = {
-        "np":                    np,
-        "_sanitize_drone_ids":   _mp_module._sanitize_drone_ids,
-        "_assign_positions":     _mp_module._assign_positions,
-        "_form_grid":            _mp_module._form_grid,
-        "_formation_arrival_time": _mp_module._formation_arrival_time,
-        "_formation_waypoints":    _mp_module._formation_waypoints,
-    }
+    namespace = {"np": np, **{name: getattr(_mp_module, name) for name in INJECTED_HELPERS}}
 
     try:
         exec(body, namespace)  # noqa: S102

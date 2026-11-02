@@ -7,7 +7,7 @@ the returned value is validated by runtime_check.py.
 """
 import ast
 
-from swarm_gpt.core.agent_b.parser import param_names
+from swarm_gpt.core.agent_b.parser import INJECTED_HELPERS, param_names
 
 
 def _main_func_body(tree: ast.AST, func_name: str) -> list[ast.stmt]:
@@ -93,7 +93,7 @@ def check(source: str, func_name: str, definition: str) -> list[str]:
 
     # exactly one `a, b, c = params` line, unpacking the Design parameters in order
     destructurings = _find_params_destructuring(body)
-    if len(desgtructurins) != 1:
+    if len(destructurings) != 1:
         failures.append(
             f"Check: expected exactly one 'a, b, c = params' line, found {len(destructurings)}"
         )
@@ -139,5 +139,12 @@ def check(source: str, func_name: str, definition: str) -> list[str]:
     forbidden = _find_forbidden_statements(body)
     if forbidden:
         failures.append(f"Check: forbidden statements: {'; '.join(forbidden)}")
+
+    # injected helpers are already in scope: a definition (top-level or nested) would shadow them
+    defined = {n.name for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)}
+    for name in sorted(defined & set(INJECTED_HELPERS)):
+        failures.append(
+            f"Check: '{name}' is an injected helper already in scope: call it, do not define it"
+        )
 
     return failures

@@ -8,19 +8,23 @@ import subprocess
 import sys
 from pathlib import Path
 
+from swarm_gpt.core.agent_b.parser import INJECTED_HELPERS
+
 _ERROR_PATTERN = re.compile(r"(.*?):(\d+):(\d+): (E\w+): (.*?) \((.*?)\)")
 
 _PREAMBLE = (
     "import numpy as np\n"
     "from numpy.typing import NDArray\n"
-    "from swarm_gpt.core.motion_primitives import _sanitize_drone_ids, _assign_positions, _form_grid, _formation_arrival_time, _formation_waypoints\n"
+    f"from swarm_gpt.core.motion_primitives import {', '.join(INJECTED_HELPERS)}\n"
+    "\n\n"
 )
+_PREAMBLE_LINES = _PREAMBLE.count("\n")  # subtracted so that pylint lines refer to the body
 
 
 def write_staging_file(path: Path, body: str) -> None:
     """Write preamble + function body to the staging file."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(_PREAMBLE + "\n\n" + body + "\n")
+    path.write_text(_PREAMBLE + body + "\n")
 
 
 def check(path: Path) -> list[str]:
@@ -43,5 +47,5 @@ def check(path: Path) -> list[str]:
         m = _ERROR_PATTERN.match(line)
         if m:
             # group(2) = line, group(5) = message, group(6) = symbol
-            errors.append(f"Line {m.group(2)}: {m.group(5)} ({m.group(6)})")
+            errors.append(f"Line {int(m.group(2)) - _PREAMBLE_LINES}: {m.group(5)} ({m.group(6)})")
     return errors

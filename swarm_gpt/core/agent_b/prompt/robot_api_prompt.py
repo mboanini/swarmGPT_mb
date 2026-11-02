@@ -11,46 +11,50 @@ def _sanitize_drone_ids(drone_ids: list[int], n_drones: int) -> list[int]:
     # ALWAYS use this on the drone_ids param before using them as array indices.
     # Example:
     #   drone_ids, radius = params
-    #   drone_ids = np.array(_sanitize_drone_ids(drone_ids, swarm_pos.shape[0]))
+    #   drone_ids = _sanitize_drone_ids(drone_ids, swarm_pos.shape[0])
 
+   
 def _assign_positions(pos, des_pos):
     # Optimal drone-to-position assignment via Hungarian algorithm (minimises total travel).
-    # BOTH pos and des_pos MUST be 2D arrays of shape (n_drones, 3). NEVER pass a 1D array.
-    # pos:     NDArray (n_drones, 3) — current drone positions in cm.
-    # des_pos: NDArray (n_drones, 3) — ONE desired position per drone (must have n_drones rows).
-    # Returns index array: des_pos[result] gives each drone's assigned target in drone order.
-    # Typical usage:
-    #   assignment = _assign_positions(swarm_pos[drone_ids], des_pos)  # des_pos shape (len(drone_ids), 3)
-    #   final_pos  = des_pos[assignment]
-    #   waypoints  = {tend: {drone_ids[i]: p.copy() for i, p in enumerate(final_pos)}}
+    # BOTH pos and des_pos MUST be 2D arrays of shape (N, 3). NEVER pass a 1D array.
+    # N is the number of drones being assigned, either all drones or a selected subset.
+    # pos:     NDArray (N, 3) — current positions of the selected drones in cm.
+    # des_pos: NDArray (N, 3) — exactly ONE desired position per selected drone.
+    # Returns an index array: des_pos[assignment] gives assigned targets
+    # in the same drone order as pos.
+    # Typical usage for a subset (drone_ids already sanitized to 0-based):
+    #   assignment = _assign_positions(swarm_pos[drone_ids], des_pos)
+    #   target = des_pos[assignment]
+    #   final_pos = swarm_pos.copy()
+    #   final_pos[drone_ids] = target
+    #   waypoints = {tend: {drone_ids[i]: p.copy() for i, p in enumerate(target)}}
+
 
 def _form_grid(swarm_pos, limits, height=None, spacing=None):
     # Form a grid of drones at the current position.
     # Returns NDArray (n_drones, 3) in cm, already assigned to drones.
     # spacing: min cm between drones (default 50). height: z override in cm.
 
-def _formation_arrival_time(target_pos, des_pos, tstart, tend) -> float:
-    # Physics floor for a "move-then-hold" primitive: earliest feasible arrival time given
-    # the bottleneck drone's travel distance. Returns a time in [tstart, tend].
-    # target_pos, des_pos: NDArray (n, 3) in cm, SAME drone order.
+def _formation_arrival_time(target_pos, current_pos, tstart, tend) -> float:
+    # Physics floor for a "move-then-hold" primitive: earliest feasible arrival time
+    # given the bottleneck drone's travel distance.
+    # target_pos:  NDArray (N, 3) — assigned target positions in cm.
+    # current_pos: NDArray (N, 3) — current positions of the SAME drones, in the SAME order.
+    # Returns an absolute arrival timestamp in [tstart, tend], NOT a duration.
     # You usually don't call this directly — `_formation_waypoints` already uses it.
 
 def _formation_waypoints(target_pos, current_pos, tstart, tend, time_to_finish_s, drone_ids=None):
-    # Build the waypoints for a "move-then-hold" primitive (reach a shape/position, then stay).
-    # Clamps time_to_finish_s between the physics floor above and (tend - tstart), places the
-    # arrival waypoint there, then re-emits periodic hold waypoints until tend.
-    # target_pos:  NDArray (n, 3) in cm — desired position per drone.
-    # current_pos: NDArray (n, 3) in cm — current position of those SAME drones, same order.
-    # drone_ids: 0-based drone indices matching target_pos rows (None = all drones, in order).
-    # Returns: dict[float, dict[int, NDArray]] — use directly as (part of) the primitive's waypoints.
-    # ALWAYS use this (not a hand-written `waypoints[tend] = ...`) whenever `params` ends in
-    # `time_to_finish_s` — that's how the parameter actually takes effect.
-    # Typical usage:
-    #   assignment = _assign_positions(swarm_pos[drone_ids], des_pos)
-    #   final = des_pos[assignment]
-    #   waypoints = _formation_waypoints(final, swarm_pos[drone_ids], tstart, tend,
-    #                                     time_to_finish_s, drone_ids)
-    #   final_pos = swarm_pos.copy(); final_pos[drone_ids] = final\
+    # Build waypoints for a move-then-hold formation.
+    # target_pos: NDArray (N, 3) — assigned target positions in cm.
+    # current_pos: NDArray (N, 3) — current positions of the same drones, same order.
+    # time_to_finish_s: requested arrival duration, clamped to the physical minimum
+    # and to the available interval.
+    # drone_ids: global 0-based indices matching the rows of target_pos;
+    #            None means indices 0 through N-1.
+    # Returns: dict[float, dict[int, NDArray]].
+    # Emits the arrival waypoint and subsequent hold waypoints through tend.
+    # Waypoint keys are global 0-based drone IDs, including when only a subset moves.
+    
 """.strip()
 
 # Source code of representative existing primitives - loaded at import time

@@ -8,7 +8,7 @@ from swarm_gpt.core.agent_b.design_function import DesignFunction
 from swarm_gpt.core.agent_b.function_node import FunctionNode
 from swarm_gpt.core.agent_b.grammar_check import check as grammar_check, write_staging_file
 from swarm_gpt.core.agent_b.mechanical_check import check as mechanical_check
-from swarm_gpt.core.agent_b.runtime_cases import prepare_test_params, check_cases
+from swarm_gpt.core.agent_b.runtime_cases import prepare_test_params, check_cases, describe_cases
 from swarm_gpt.core.agent_b.validate_description import ValidateNameDesc
 from swarm_gpt.core.agent_b.write_function import WriteFunction
 
@@ -62,10 +62,12 @@ class Pipeline:
         self._reviewer.run()
 
         # Certification: StaticCheck + RuntimeCheck + Debug repairs
-        test_params = prepare_test_params(node.definition, node.n_args)  # inferred once, reused
-        if test_params is None:
-            raise RuntimeError(f"Unable to prepare runtime test parameters for '{name}'")
-        debug_context = f"Description: {node.description}\n\nInterface:\n{node.definition}"
+        # inferred once, reused; raises TestParamsError if no valid inputs can be inferred
+        test_params = prepare_test_params(node.definition, name)
+        debug_context = (
+            f"Description: {node.description}\n\nInterface:\n{node.definition}\n\n"
+            f"Runtime test cases:\n{describe_cases(test_params)}"
+        )
 
         for debug_calls in range(_MAX_DEBUG_CALLS + 1):
             write_staging_file(staging_path, node.body)

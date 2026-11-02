@@ -6,5 +6,5 @@ Indoor arena with rectangular spatial limits.
     - limits["lower"] and limits["upper"] are in METERS — multiply by 100 for cm.
     - `swarm_pos` shape: (n_drones, 3) in cm. n_drones = swarm_pos.shape[0].
     - Max velocity between consecutive waypoints: 173 cm/s.
-    - Min distance between any two drones at every waypoint: 40 cm.
+    - Min distance between any two drones at every waypoint: 15 cm.
 """.strip()

@@ -1,7 +1,10 @@
 import ast
 import re
 
-_PRE_IMPORTED_HELPERS = {"_sanitize_drone_ids", "_assign_positions", "_form_grid"}
+INJECTED_HELPERS = (
+    "_sanitize_drone_ids", "_assign_positions", "_form_grid",
+    "_formation_arrival_time", "_formation_waypoints",
+)
 
 
 def parse_text(text: str, lang: str = "python") -> str:
@@ -101,20 +104,6 @@ class FunctionParser:
                 f"# n_args: {self._n_args} does not match the actual params arity "
                 f"({actual} name(s) unpacked from params)."
             )
-
-    def strip_imported_helpers(self) -> None:
-        """Remove top-level redefinitions of module-level helpers that are already
-        injected into every primitive's scope. Keeps any other helper functions."""
-        tree = ast.parse(self._code)
-        lines = self._code.splitlines()
-        to_remove = [
-            (n.lineno - 1, n.end_lineno)
-            for n in tree.body
-            if isinstance(n, ast.FunctionDef) and n.name in _PRE_IMPORTED_HELPERS
-        ]
-        for start, end in reversed(to_remove):
-            lines[start:end] = []
-        self._code = "\n".join(lines).strip()
 
     @property
     def function_name(self) -> str:

@@ -5,6 +5,7 @@ from swarm_gpt.core.agent_b.prompt import (
     CONSTRAINTS_TEXT,
     ENV_DES,
     FEW_SHOT_EXAMPLES,
+    IMPLEMENTATION_RULES,
     ROBOT_API_DESC,
     TASK_DES,
     WRITE_PROMPT,
@@ -18,6 +19,7 @@ class WriteFunction(ActionNode):
             env_des             = ENV_DES,
             function_name       = self._node.name,
             function_definition = self._node.definition,
+            implementation_rules = IMPLEMENTATION_RULES.format(env_des=ENV_DES),
             robot_api           = ROBOT_API_DESC,
             other_functions     = FEW_SHOT_EXAMPLES,
             constraints         = CONSTRAINTS_TEXT,
@@ -29,6 +31,5 @@ class WriteFunction(ActionNode):
         parser.parse(code)
         parser.check_function_name(self._node.name)
         # parser.check_n_args()
-        parser.strip_imported_helpers()
         self._node.body   = parser.function_definition
         self._node.state  = State.IMPLEMENTED

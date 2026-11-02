@@ -2,6 +2,13 @@
 from swarm_gpt.core.agent_b.action import ActionNode
 from swarm_gpt.core.agent_b.function_node import State
 from swarm_gpt.core.agent_b.parser import FunctionParser, parse_text
+from swarm_gpt.core.agent_b.prompt import (
+    CONSTRAINTS_TEXT,
+    DEBUG_PROMPT,
+    ENV_DES,
+    IMPLEMENTATION_RULES,
+    ROBOT_API_DESC,
+)
 
 
 class DebugFunction(ActionNode):
@@ -17,14 +24,14 @@ class DebugFunction(ActionNode):
     def _build_prompt(self) -> None:
         error_block = "\n".join(f"  - {e}" for e in self._errors)
         context_block = f"\n\n## Context\n{self._context}" if self._context else ""
-        self.prompt = (
-            "The following Python function has errors. Fix them and return the corrected function. "
-            "Keep the same name, signature and # n_args comment, and unpack `params` with the same "
-            "names, in the same order and with the same meaning as the Interface."
-            f"{context_block}\n\n"
-            f"```python\n{self._node.body}\n```\n\n"
-            f"Errors:\n{error_block}\n\n"
-            "Return only the corrected function inside a ```python``` block."
+        # same code rules and constraints as the Write stage
+        self.prompt = DEBUG_PROMPT.format(
+            context_block        = context_block,
+            function_body        = self._node.body,
+            error_block          = error_block,
+            robot_api            = ROBOT_API_DESC,
+            implementation_rules = IMPLEMENTATION_RULES.format(env_des=ENV_DES),
+            constraints          = CONSTRAINTS_TEXT,
         )
 
     def _process_response(self, response: str) -> None:

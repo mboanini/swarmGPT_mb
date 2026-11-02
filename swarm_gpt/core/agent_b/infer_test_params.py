@@ -20,15 +20,17 @@ Generate a valid Python tuple with realistic test values for `params`.
 
 Rules:
 - Use only plain Python literals (int, float, str, list of int) — no numpy arrays, no positions.
-- If `drone_ids` is a parameter, use a list of integers from 1 to {n_drones} (1-indexed), e.g. [1, 2, 3, 4].
+- This scenario has {n_drones} drones with the 1-based IDs {valid_ids}. Use no other drone IDs:
+  - `drone_ids`: a non-empty list of distinct IDs taken from {valid_ids}.
+  - a single-drone parameter (name ending in `_id`, e.g. `leader_id`): one ID from {valid_ids}.
 - For other parameters, pick realistic values based on the description (e.g. distances in cm, angles in degrees, counts as small integers).
 
 - The test window is ({tstart}, {tend}] seconds. Keep duration values within this window.
 - This is scenario {case_number}; choose a different valid combination of values for each scenario.
 
 Output: one Python tuple on a single line, nothing else.
-Examples: (3, 150) or ([1, 2, 3, 4], 90, 'z')
-""".strip()
+Examples: (3, 150) or ({valid_ids}, 90, 'z')
+{feedback}""".strip()
 
 
 def _extract_params_description(function_definition: str) -> str:
@@ -55,21 +57,21 @@ def infer(
     tstart: float,
     tend: float,
     case_index: int = 0,
+    feedback: str = "",
 ) -> tuple | None:
     """Call the LLM to generate a test_params tuple from the function interface
 
-    Returns a tuple on success, None if the LLM call or parsing fails
+    Returns a tuple on success, None if the answer cannot be parsed.
+    API failures propagate (tenacity RetryError), as in every other stage.
+    `feedback` explains why a previous answer was rejected.
     """
     params_description = _extract_params_description(function_definition)
     prompt = _PROMPT.format(
         params_description=params_description, n_drones=n_drones,
-        tstart=tstart, tend=tend, case_number=case_index + 1,
+        valid_ids=list(range(1, n_drones + 1)),
+        tstart=tstart, tend=tend, case_number=case_index + 1, feedback=feedback,
     )
-    try:
-        raw = _call_llm(prompt).strip()
-    except Exception as exc:
-        logger.warning(f"InferTestParams: LLM call failed ({exc})")
-        return None
+    raw = _call_llm(prompt).strip()
 
     # Strip markdown fences if present
     m = re.search(r"```(?:python)?\s*(.*?)```", raw, re.DOTALL)
