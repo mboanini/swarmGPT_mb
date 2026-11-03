@@ -137,6 +137,10 @@ rgbas = rng.random((sim.n_drones, 4))
 rgbas[..., 3] = 1
 swarm_pos = [deque(maxlen=100) for _ in range(sim.n_drones)]
 
+# Experiment recording of the displayed simulation (None unless the parent set a record dir)
+from swarm_gpt.recording.sim_trace import VizTrace
+trace = VizTrace.from_env(sim, splines, duration)
+
 tstart   = time.time()
 n_steps  = int(duration * sim.control_freq)
 
@@ -166,6 +170,8 @@ try:
         sim.state_control(controls)
         sim.step(sim.freq // sim.control_freq)
         step_time += time.perf_counter() - _t0
+        if trace is not None:
+            trace.record(ct, controls, sim)
 
         if ((i * fps) % sim.control_freq) < fps:
             _t0 = time.perf_counter()
@@ -184,6 +190,8 @@ try:
                 time.sleep(dt)
                 sleep_time += dt
 finally:
+    if trace is not None:
+        trace.close()
     total_wall = time.time() - loop_wall_start
     print(
         f"[VIZ TIMING] expected_duration={duration:.2f}s actual_wall={total_wall:.2f}s "

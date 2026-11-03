@@ -51,3 +51,6 @@ submodules/crazyswarm2/ros_ws/log/**
 # Generated simulation plots
 deviazione_sicurezza.png
 phase1_*.png
+
+# Experiment recordings (swarm_gpt/recording)
+experiments/

@@ -11,6 +11,7 @@ import fire
 import sys
 sys.path.append('/data/home/crazyflie/Documents/swarmGPT_mb/')
 
+from swarm_gpt import recording
 from swarm_gpt.core import AppBackend
 from swarm_gpt.ui import create_ui
 
@@ -34,10 +35,21 @@ def mklog_date(path: Path) -> Path:
 
 
 def main(
-    strict: bool = True, model_id: str = "gpt-4o-2024-05-13", use_motion_primitives: bool = False
+    strict: bool = True,
+    model_id: str = "gpt-4o-2024-05-13",
+    use_motion_primitives: bool = False,
+    run: str | None = None,
 ):
-    
-    """Build the gui and launch the demo."""
+
+    """Build the gui and launch the demo.
+
+    Args:
+        strict: Flag to raise an error on waypoint collisions.
+        model_id: The OpenAI GPT model ID of the Choreographer.
+        use_motion_primitives: If we want LLM to use motion primitives for choreography.
+        run: Experiment run name; data are recorded to experiments/<run>/ (an existing run is
+            resumed). Without a name, nothing is recorded.
+    """
     logging.basicConfig(level=logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)  # Suppress httpx info messages
     logging.getLogger("jax").setLevel(logging.WARNING)
@@ -50,7 +62,16 @@ def main(
     music_dir = Path(__file__).resolve().parents[1] / "music"
     
     config_file = Path(__file__).resolve().parents[1] / "config" / "crazyflies.yaml"
-    
+
+    # Automatic experiment recording (observation hooks only), installed before the UI is built.
+    # Without a run name nothing is installed and the application behaves as before.
+    if run is not None:
+        recording.install(
+            run_name=run,
+            launch_args={"strict": strict, "model_id": model_id,
+                         "use_motion_primitives": use_motion_primitives, "run": run},
+        )
+
     # Model IDs: "gpt-4o-2024-05-13", "gpt-3.5-turbo-0125", "gpt-4o-2024-05-13"
     backend = AppBackend(
         config_file=config_file,
