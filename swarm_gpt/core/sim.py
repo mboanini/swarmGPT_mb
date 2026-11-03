@@ -21,6 +21,7 @@ from crazyflow.control import Control
 from crazyflow.sim import Physics, Sim
 from tqdm import tqdm
 
+from swarm_gpt.recording.sim_trace import SimTrace
 from swarm_gpt.utils import MusicManager
 from swarm_gpt.utils.utils import draw_line
 
@@ -157,6 +158,9 @@ def simulate_axswarm(
     pos, vel = np.asarray(sim.data.states.pos[0]), np.asarray(sim.data.states.vel[0])
     states, controls, solve_times = [], [], []  # logging variables
 
+    # Experiment recording (observational): None unless AppBackend.simulate requested a record
+    trace = SimTrace.start(sim, solver_settings, settings, waypoints, False, None)
+
     # Set up colours for tracking lines
     rng = np.random.default_rng(0)
     rgbas = rng.random((sim.n_drones, 4))
@@ -242,9 +246,11 @@ def simulate_axswarm(
                     pre_solve_min_normalized[i, j] = min_normalized
                     pre_solve_min_normalized[j, i] = min_normalized
 
-            success, _, solver_data = solve(state, t, solver_data, solver_settings)
+            success, n_iters, solver_data = solve(state, t, solver_data, solver_settings)
             jax.block_until_ready(solver_data)
             solve_times.append(time.perf_counter() - t_solve)
+            if trace is not None:  # full horizon, before solver_data.step() shifts it
+                trace.record_solve(t, state, solver_data, success, n_iters, solve_times[-1])
 
             # ---------------------------------------------------------
             # Store the one-MPC-step-ahead prediction for the next PHASE 1 check.
@@ -346,6 +352,8 @@ def simulate_axswarm(
         # Run the simulation
         sim.state_control(control)
         sim.step(sim.freq // sim.control_freq)
+        if trace is not None:
+            trace.record_step(step, control, sim)
 
         # Render simulation with visualizations of the planned trajectories
         if ((step * fps) % sim.control_freq) < fps and gui:
@@ -503,6 +511,8 @@ def simulate_axswarm(
             "predicted_unsafe_actual_safe": int(np.sum((np.asarray(h_min_predicted_one_step_log) < 0.0) & (np.asarray(h_min_actual_log) >= 0.0))),
         },
     }
+    if trace is not None:
+        trace.close()
     yield "result", sim_log, "placeholder"
     # return sim_log
 

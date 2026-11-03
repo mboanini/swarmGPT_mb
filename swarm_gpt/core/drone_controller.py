@@ -377,10 +377,12 @@ class DroneController:
 
         self.swarm.timeHelper.nextTime = None
         tstart = time.perf_counter()
+        self._spline_tstart = tstart  # read by the experiment recorder only
 
         while time.perf_counter() - tstart < duration:
             for drone_id in drone_ids:
                 t = time.perf_counter() - tstart
+                self._spline_t = t  # exact spline evaluation time, read by the experiment recorder
                 pos = np.array([s(t) for s in splines[drone_id]], dtype=float)
                 vel = np.array([s(t) for s in vel_splines[drone_id]], dtype=float)
                 self.cmd_state(drones[drone_id], pos, vel)
