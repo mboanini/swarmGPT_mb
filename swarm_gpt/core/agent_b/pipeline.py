@@ -19,7 +19,7 @@ _MAX_DEBUG_CALLS = 3
 
 
 class Pipeline:
-    def __init__(self, model: str = "gpt-4o"):
+    def __init__(self, model: str = "gpt-6-luna"):
         self._describer           = DescribePrimitive(model=model)
         self._name_desc_validator = ValidateNameDesc()
         self._designer            = DesignFunction(model=model)

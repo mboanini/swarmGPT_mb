@@ -11,7 +11,7 @@ _PRIMITIVES_PATH = Path(__file__).resolve().parents[2] / "data/primitives.yaml"
 
 
 class DescribePrimitive:
-    def __init__(self, model: str = "gpt-4o"):
+    def __init__(self, model: str = "gpt-6-luna"):
         self._model = model
 
     def run(self, user_command: str) -> tuple[str, str]:
@@ -33,6 +33,6 @@ class DescribePrimitive:
             model=self._model,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
-            max_tokens=256,
+            max_completion_tokens=1024,
         )
         return json.loads(response.choices[0].message.content)

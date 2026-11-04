@@ -59,7 +59,7 @@ class Choreographer:
         self,
         config_file: Path,
         *,
-        model_id: str = "gpt-4o-2024-05-13",
+        model_id: str = "gpt-6-luna",
         use_motion_primitives: bool = False,
     ):
         """Initialize the choreographer.
@@ -210,7 +210,7 @@ class Choreographer:
 
     def _call_openai(self, messages: list[dict[str, str]]) -> str:
         response = client.chat.completions.create(
-            model=self._model_id, messages=messages, max_tokens=4096
+            model=self._model_id, messages=messages, max_completion_tokens=8192
         )
         return response.choices[0].message.content
 

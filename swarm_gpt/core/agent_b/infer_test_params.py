@@ -9,7 +9,6 @@ from swarm_gpt.core._llm_client import client
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "gpt-4o"
 
 _PROMPT = """
 The `params` argument of a motion primitive is described as follows:
@@ -44,9 +43,9 @@ def _extract_params_description(function_definition: str) -> str:
 @retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=1, max=10))
 def _call_llm(prompt: str) -> str:
     response = client.chat.completions.create(
-        model=_MODEL,
+        model="gpt-6-luna",
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=128,
+        max_completion_tokens=512,
     )
     return response.choices[0].message.content
 
