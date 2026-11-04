@@ -5,7 +5,7 @@ from swarm_gpt.core.agent_b.function_node import FunctionNode
 
 
 class ActionNode:
-    def __init__(self, model: str = "gpt-4o"):
+    def __init__(self, model: str = "gpt-6-luna"):
         self.prompt = None    # formatted prompt string, filled by _build_prompt()
         self._node  = None    # FunctionNode, set via setup()
         self._model = model
@@ -23,7 +23,7 @@ class ActionNode:
         response = client.chat.completions.create(
             model=self._model,
             messages=[{"role": "user", "content": self.prompt}],
-            max_tokens=4096,
+            max_completion_tokens=8192,
         )
         return response.choices[0].message.content
 

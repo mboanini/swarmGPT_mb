@@ -34,7 +34,10 @@ def mklog_date(path: Path) -> Path:
 
 
 def main(
-    strict: bool = True, model_id: str = "gpt-4o-2024-05-13", use_motion_primitives: bool = False
+    strict: bool = True,
+    model_id: str = "gpt-6-luna",
+    use_motion_primitives: bool = False,
+    run: str | None = None,
 ):
     
     """Build the gui and launch the demo."""

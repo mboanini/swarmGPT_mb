@@ -2,7 +2,7 @@
 Router for drone swarm commands.
 
 Architecture:
-Direct LLM classification (gpt-4o-mini) - given the full primitive catalog
+Direct LLM classification (gpt-4o) - given the full primitive catalog
 (name + description) and the command in one prompt (router_prompt.yaml), 
 the LLM decides whether each part of the command (it may describe several 
 distinct motions/formations) is covered by an existing primitive, and returns 
@@ -112,7 +112,7 @@ class Router:
             {"role": "system", "content": self.prompt_router["output_format"]},
         ]
         response = self.client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=messages,
             response_format={"type": "json_object"},
             temperature=0,

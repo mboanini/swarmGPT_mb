@@ -12,7 +12,7 @@ from swarm_gpt.core.agent_b.prompt import (
 
 
 class DebugFunction(ActionNode):
-    def __init__(self, model: str = "gpt-4o"):
+    def __init__(self, model: str = "gpt-6-luna"):
         super().__init__(model)
         self._errors: list[str] = []
         self._context: str | None = None
