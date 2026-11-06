@@ -1,0 +1,300 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+    --sw-bg: #F7F9F6;
+    --sw-surface: #FFFFFF;
+    --sw-text: #293D35;
+    --sw-muted: #82958A;
+    --sw-primary: #668A7A;
+    --sw-primary-hover: #4F7162;
+    --sw-primary-light: #E7F0EA;
+    --sw-border: #DEE8E0;
+    --sw-shadow: 0 4px 22px rgba(41, 61, 53, 0.04);
+}
+
+/* PAGE */
+
+html, body {
+    background: var(--sw-bg) !important;
+}
+
+.gradio-container {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 34px clamp(24px, 5vw, 90px) 70px !important;
+    background: var(--sw-bg) !important;
+    color: var(--sw-text) !important;
+}
+
+.gradio-container,
+.gradio-container button,
+.gradio-container input,
+.gradio-container textarea {
+    font-family: 'Nunito Sans', sans-serif !important;
+    letter-spacing: normal !important;
+}
+
+/* HEADER */
+
+#sw-header {
+    padding-bottom: 24px !important;
+    border-bottom: 1px solid var(--sw-border);
+    margin-bottom: 44px !important;
+}
+
+#sw-header .app-title {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 5px;
+}
+
+#sw-header .app-title strong {
+    font-size: 32px;
+    font-weight: 800;
+    letter-spacing: -0.8px;
+    line-height: 1.3;
+    color: var(--sw-text);
+}
+
+#sw-header .app-title .subtitle {
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--sw-muted);
+}
+
+/* HEADINGS */
+
+#sw-command-heading h2,
+#sw-chat-heading h2 {
+    font-size: 21px !important;
+    font-weight: 600 !important;
+    letter-spacing: normal !important;
+    margin: 0 0 8px !important;
+    color: var(--sw-text) !important;
+}
+
+#sw-command-description p {
+    color: var(--sw-muted) !important;
+    font-size: 14px !important;
+    line-height: 1.7 !important;
+    margin-bottom: 16px !important;
+}
+
+/* TEXTBOXES */
+
+#sw-prompt,
+#sw-refine-input {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+
+#sw-prompt > div,
+#sw-refine-input > div {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+#sw-prompt textarea,
+#sw-refine-input textarea {
+    background: var(--sw-surface) !important;
+    color: var(--sw-text) !important;
+    border: 1px solid var(--sw-border) !important;
+    border-radius: 14px !important;
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+#sw-prompt textarea {
+    font-size: 15px !important;
+    line-height: 1.8 !important;
+    padding: 19px 22px !important;
+    min-height: 145px !important;
+}
+
+#sw-refine-input textarea {
+    font-size: 14px !important;
+    line-height: 1.7 !important;
+    padding: 14px 16px !important;
+}
+
+#sw-prompt textarea::placeholder,
+#sw-refine-input textarea::placeholder {
+    color: #9EADA3 !important;
+}
+
+#sw-prompt textarea:focus,
+#sw-refine-input textarea:focus {
+    border-color: #A6C1B1 !important;
+    box-shadow: none !important;
+}
+
+/* BUTTONS */
+
+#sw-generate-row {
+    margin-top: 16px !important;
+    align-items: center !important;
+}
+
+#sw-generate,
+#sw-simulate,
+#sw-replay,
+#sw-refine-button,
+#sw-new-command,
+#sw-deploy,
+#sw-apply-refine,
+#sw-cancel-refine {
+    border-radius: 10px !important;
+    min-height: 44px !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    padding: 10px 19px !important;
+    box-shadow: none !important;
+    transition: background-color .18s ease, border-color .18s ease;
+}
+
+#sw-generate,
+#sw-simulate,
+#sw-apply-refine {
+    background: var(--sw-primary) !important;
+    border: 1px solid var(--sw-primary) !important;
+    color: #FFFFFF !important;
+}
+
+#sw-generate:hover,
+#sw-simulate:hover,
+#sw-apply-refine:hover {
+    background: var(--sw-primary-hover) !important;
+    border-color: var(--sw-primary-hover) !important;
+}
+
+#sw-replay,
+#sw-refine-button,
+#sw-new-command,
+#sw-cancel-refine {
+    background: var(--sw-surface) !important;
+    color: var(--sw-text) !important;
+    border: 1px solid var(--sw-border) !important;
+}
+
+#sw-replay:hover,
+#sw-refine-button:hover,
+#sw-new-command:hover,
+#sw-cancel-refine:hover {
+    background: #F0F5F0 !important;
+}
+
+#sw-deploy {
+    background: var(--sw-primary-light) !important;
+    color: var(--sw-primary-hover) !important;
+    border: 1px solid transparent !important;
+}
+
+#sw-deploy:hover {
+    background: #D8E8DD !important;
+}
+
+/* CONVERSATION */
+
+#sw-chat-section {
+    margin-top: 30px !important;
+}
+
+#sw-chat-heading {
+    margin-bottom: 15px !important;
+}
+
+#sw-chat {
+    background: var(--sw-surface) !important;
+    border: 1px solid var(--sw-border) !important;
+    border-radius: 17px !important;
+    box-shadow: var(--sw-shadow) !important;
+    overflow: hidden !important;
+}
+
+/* REFINEMENT */
+
+#sw-refine-panel {
+    margin-top: 22px !important;
+    padding: 23px !important;
+    border: 1px solid var(--sw-border) !important;
+    border-radius: 15px !important;
+    background: #F0F5F0 !important;
+    box-shadow: none !important;
+}
+
+#sw-refine-heading h3 {
+    font-size: 15px !important;
+    font-weight: 600 !important;
+    color: var(--sw-text) !important;
+    margin-bottom: 7px !important;
+}
+
+#sw-refine-description p {
+    font-size: 13px !important;
+    color: var(--sw-muted) !important;
+    margin-bottom: 15px !important;
+}
+
+#sw-refine-actions {
+    margin-top: 13px !important;
+    gap: 11px !important;
+}
+
+/* ACTIONS */
+
+#sw-actions {
+    margin-top: 20px !important;
+    gap: 11px !important;
+    align-items: center !important;
+}
+
+#sw-secondary-actions {
+    margin-top: 12px !important;
+    gap: 11px !important;
+}
+
+/* SIMULATION OUTPUT */
+
+#sw-progress {
+    width: 100%;
+    background: #FFFFFF;
+    border: 1px solid #DEE8E0;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin: 14px 0;
+    box-shadow: 0 2px 12px rgba(41, 61, 53, 0.04);
+}
+
+#sw-progress textarea,
+#sw-progress input {
+    background: white !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* MOBILE */
+
+@media (max-width: 720px) {
+    .gradio-container {
+        padding: 22px 18px 45px !important;
+    }
+
+    #sw-header {
+        margin-bottom: 30px !important;
+    }
+
+    #sw-prompt textarea {
+        min-height: 115px !important;
+    }
+
+    #sw-refine-panel {
+        padding: 16px !important;
+    }
+}
