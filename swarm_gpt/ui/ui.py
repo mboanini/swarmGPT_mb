@@ -1,8 +1,308 @@
-"""GUI module for the gradio web app."""
+# """GUI module for the gradio web app."""
+
+# from __future__ import annotations
+
+# import warnings
+# from typing import TYPE_CHECKING, Callable, List
+
+# import gradio as gr
+
+# if TYPE_CHECKING:
+#     from swarm_gpt.core import AppBackend
+
+
+# def padding_column():
+#     """Create a column with a hidden textbox to add padding to the UI."""
+#     with gr.Column():
+#         gr.Textbox(visible=False)
+
+
+# def centered_markdown(text: str) -> gr.Markdown:
+#     """Create a centered markdown element."""
+#     md = f'<div align="center"> <font size = "10"> <span style="color:grey">{text}</span>'
+#     return gr.Markdown(md, visible=False)
+
+
+# def update_visibility(visible_flags: List[bool]) -> Callable:
+#     """Return a function that yields gradio visibility updates."""
+#     def gradio_ui_update() -> List[dict]:
+#         return [gr.update(visible=x) for x in visible_flags]
+#     return gradio_ui_update
+
+
+# def run_with_bar(backend: AppBackend, progress: gr.Progress = gr.Progress(track_tqdm=True)) -> str:
+#     """Run the simulation with a progress bar."""
+#     # Get the generator from your simulation code
+#     for key, data, total in backend.simulate():
+#         if key == "progress":
+#             if data != total:
+#                 percent = int(data / total)
+#                 progress(percent, desc="Simulation Loading...", total=100)
+#             else:
+#                 progress(100, desc="Simulation Playing", total=100)
+#         else:
+#             return "Simulation Playing!"
+
+
+# def create_ui(backend: AppBackend) -> gr.Blocks:
+#     """Create the gradio web app.
+
+#     Args:
+#         backend: The app backend. This is used to connect the UI to the simulator, AMSwarm and the
+#             ROS nodes that execute the choreography.
+
+#     Returns:
+#         The UI.
+#     """
+#     # Ignore gradio renaming warnings
+#     warnings.filterwarnings("ignore", category=UserWarning, message="api_name")
+#     # Define the UI
+#     with gr.Blocks(theme=gr.themes.Monochrome()) as ui:
+#         gr.Markdown(""" <div align="center"> <font size = "50"> GenSwarm-GPT""", elem_id="genswarmgpt")
+
+#         # Input row
+#         with gr.Row():
+#             padding_column()
+#             with gr.Column():
+#                 user_prompt_input = gr.Textbox(
+#                     label="What should the drones do?",
+#                     placeholder="E.g.: Form a triangle at 1.5m high for 10 seconds...",
+#                     lines=2,
+#                 )
+#             with gr.Column():
+#                 prompt_choices = list(backend.choreographer.prompts.keys())
+#                 prompt_mode = gr.Dropdown(
+#                     choices=prompt_choices,
+#                     label="Prompt Mode:",
+#                     value=prompt_choices[0] if prompt_choices else None,
+#                     visible=False,
+#                     interactive=True,
+#                 )
+#             padding_column()
+
+#         # Interface during data processing and simulation
+#         with gr.Row():
+#             with gr.Column():
+#                 replay_msg  = centered_markdown("Replaying simulation")
+#                 sim_msg     = centered_markdown("Simulating safe choreography")
+#                 choreo_msg  = centered_markdown("LLM is generating choreography")
+
+#         # Chatbot and message display
+#         chatbot = gr.Chatbot(visible=False)
+#         message = gr.Textbox(label="Enter prompt:", visible=False)
+
+#         # Progress bar
+#         with gr.Row():
+#             with gr.Column():
+#                 progress_bar = gr.Textbox("Progress", visible=False)
+
+#         # Action buttons
+#         with gr.Row():
+#             padding_column()
+#             with gr.Column():
+#                 replay_sim_button = gr.Button("Replay simulation", visible=False)
+#                 sim_button        = gr.Button("Simulate",          visible=False)
+#             with gr.Column():
+#                 alter_button = gr.Button("Refine/Modify the choreography", visible=False)
+#             padding_column()
+
+#         with gr.Row():
+#             padding_column()
+#             with gr.Column():
+#                 new_command_button = gr.Button("New Command", visible=False)
+#             padding_column()
+
+#         with gr.Row():
+#             padding_column()
+#             with gr.Column():
+#                 start_button      = gr.Button("Send selections to LLM", visible=False)
+#                 deploy_button     = gr.Button("Let the Crazyflies move", visible=False)
+#                 save_preset_button = gr.Button("Save preset",            visible=False)
+#                 show_output = gr.Checkbox(
+#                     label="Display conversation with LLM",
+#                     visible=False,
+#                     value=False,
+#                     container=True,
+#                     interactive=True,
+#                 )
+#             padding_column()
+
+#         # All UI elements that the reset function must touch 
+#         RESETABLE_FLOW = [
+#             user_prompt_input,   # 0
+#             start_button,        # 1
+#             sim_button,          # 2
+#             alter_button,        # 3
+#             new_command_button,  # 4
+#             deploy_button,       # 5
+#             save_preset_button,  # 6
+#             chatbot,             # 7
+#             choreo_msg,          # 8
+#             show_output,         # 9
+#             replay_sim_button,   # 10
+#             sim_msg,             # 11
+#             replay_msg,          # 12
+#             progress_bar,        # 13
+#             message,             # 14
+#         ]
+
+#         def full_reset_ui():
+#             """Return gradio updates that bring every widget back to initial state."""
+#             return [
+#                 gr.update(value="", visible=True),   # user_prompt_input  – visible again
+#                 gr.update(visible=True),             # start_button – sempre visibile dopo reset
+#                 gr.update(visible=False),             # sim_button
+#                 gr.update(visible=False),             # alter_button
+#                 gr.update(visible=False),             # new_command_button
+#                 gr.update(visible=False),             # deploy_button
+#                 gr.update(visible=False),             # save_preset_button
+#                 gr.update(visible=False, value=[]),   # chatbot
+#                 gr.update(visible=False),             # choreo_msg
+#                 gr.update(visible=False, value=False),# show_output
+#                 gr.update(visible=False),             # replay_sim_button
+#                 gr.update(visible=False),             # sim_msg
+#                 gr.update(visible=False),             # replay_msg
+#                 gr.update(visible=False, value=""),   # progress_bar
+#                 gr.update(visible=False, value=None), # message
+#             ]
+
+#         # Show start button only when the user has typed something
+#         user_prompt_input.change(
+#             lambda x: gr.update(visible=len(x) > 0),
+#             inputs=[user_prompt_input],
+#             outputs=[start_button],
+#         )
+
+#         # start_button
+#         start_button_flow = start_button.click(
+#             update_visibility([False, False, True, True]),
+#             [],
+#             [
+#                 user_prompt_input, 
+#                 start_button, 
+#                 choreo_msg, 
+#                 show_output,
+#             ],
+#         )
+#         start_button_flow = start_button_flow.success(
+#             backend.initial_prompt,
+#             inputs=[user_prompt_input],
+#             outputs=chatbot,
+#         )
+#         start_button_flow = start_button_flow.success(
+#             update_visibility([False, True, True, True, True, True]),
+#             [],
+#             [
+#                 choreo_msg, 
+#                 sim_button, 
+#                 alter_button, 
+#                 new_command_button, 
+#                 deploy_button, 
+#                 save_preset_button,
+#             ],
+#         )
+
+#         # alter_button
+#         alter_button_flow = alter_button.click(
+#             lambda: gr.update(visible=True, value=None), [], [message]
+#         )
+#         alter_button_flow = alter_button_flow.success(
+#             update_visibility([False, False, False, False, True]),
+#             [],
+#             [alter_button, deploy_button, replay_sim_button, sim_button, chatbot],
+#         )
+
+#         # Show output of the LLM if the checkbox is checked
+#         def on_select(evt: gr.SelectData) -> dict:
+#             return gr.update(visible=evt.value)
+
+#         show_output.select(on_select, [], [chatbot])
+
+#         # Message flow
+#         message_flow = message.submit(
+#             update_visibility([False, False, True]), [], [sim_msg, replay_msg, choreo_msg]
+#         )
+#         message_flow = message_flow.success(backend.reprompt, [message], [chatbot])
+#         message_flow = message_flow.success(
+#             update_visibility([False, False, True, True, False]),
+#             [],
+#             [alter_button, choreo_msg, sim_button, deploy_button, replay_sim_button],
+#         )
+#         message_flow = message_flow.success(
+#             lambda: gr.update(visible=True, value=None), [], message
+#         )
+
+#         # Sim button flow. On click, the sim message appears and all other messages disappear
+#         sim_button_flow = sim_button.click(
+#             update_visibility([False, False, True, True]),
+#             [],
+#             [replay_msg, choreo_msg, sim_msg, progress_bar],
+#         )
+#         # AMSwarm is launched and the resulting trajectories are simulated
+#         sim_button_flow = sim_button_flow.success(
+#             lambda: run_with_bar(backend), outputs=progress_bar
+#         )
+
+#         # The buttons reappear and the sim message disappear
+#         sim_button_flow = sim_button_flow.success(
+#             update_visibility([False, False, True, True, True, True, False]),
+#             [],
+#             [
+#                 sim_msg, 
+#                 sim_button, 
+#                 replay_sim_button, 
+#                 alter_button, 
+#                 deploy_button, 
+#                 new_command_button, 
+#                 progress_bar,
+#             ],
+#         )
+
+#         # Deploy button flow
+#         deploy_button.click(backend.deploy, [], chatbot)
+
+#         # Save preset button flow
+#         save_preset_button.click(backend.save_preset, [], [])
+
+#         # Replay sim button flow 
+#         # Replay reuses already computed splines - it does not reexecute axswarm
+#         replay_sim_flow = replay_sim_button.click(
+#             update_visibility([False, False, True, False, False, False]),
+#             [],
+#             [sim_msg, choreo_msg, replay_msg,
+#              replay_sim_button, alter_button, new_command_button],
+#         )
+#         replay_sim_flow = replay_sim_flow.success(
+#             backend.replay,
+#             inputs=[],
+#             outputs=[],
+#         )
+#         replay_sim_flow = replay_sim_flow.success(
+#             update_visibility([False, True, True, True]),
+#             [],
+#             [replay_msg, replay_sim_button, alter_button, new_command_button],
+#         )
+
+#         # New Command button
+#         new_command_button.click(
+#             fn=backend.reset_data,
+#             inputs=[],
+#             outputs=[],
+#         ).success(
+#             fn=full_reset_ui,
+#             inputs=[],
+#             outputs=RESETABLE_FLOW,
+#         )
+
+#     return ui
+
+
+"""swarmCtrl. - GUI module for the gradio web app"""
 
 from __future__ import annotations
 
 import warnings
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable, List
 
 import gradio as gr
@@ -11,279 +311,523 @@ if TYPE_CHECKING:
     from swarm_gpt.core import AppBackend
 
 
-def padding_column():
-    """Create a column with a hidden textbox to add padding to the UI."""
-    with gr.Column():
-        gr.Textbox(visible=False)
-
-
-def centered_markdown(text: str) -> gr.Markdown:
-    """Create a centered markdown element."""
-    md = f'<div align="center"> <font size = "10"> <span style="color:grey">{text}</span>'
-    return gr.Markdown(md, visible=False)
-
+css = (Path(__file__).resolve().parent / "ui.css").read_text(
+    encoding="utf-8"
+)
 
 def update_visibility(visible_flags: List[bool]) -> Callable:
-    """Return a function that yields gradio visibility updates."""
+    """Return Gradio visibility updates."""
+
     def gradio_ui_update() -> List[dict]:
-        return [gr.update(visible=x) for x in visible_flags]
+        return [
+            gr.update(visible=value)
+            for value in visible_flags
+        ]
+
     return gradio_ui_update
 
 
-def run_with_bar(backend: AppBackend, progress: gr.Progress = gr.Progress(track_tqdm=True)) -> str:
-    """Run the simulation with a progress bar."""
-    # Get the generator from your simulation code
+def run_with_bar(
+    backend: AppBackend,
+    progress: gr.Progress = gr.Progress(track_tqdm=True),
+) -> str:
+    """Run the existing simulation and report progress."""
+
     for key, data, total in backend.simulate():
+
         if key == "progress":
-            if data != total:
-                percent = int(data / total)
-                progress(percent, desc="Simulation Loading...", total=100)
-            else:
-                progress(100, desc="Simulation Playing", total=100)
+            if total:
+                fraction = max(
+                    0.0,
+                    min(1.0, data / total),
+                )
+
+                progress(
+                    fraction,
+                    desc="Simulating...",
+                )
+
         else:
-            return "Simulation Playing!"
+            return "Simulation playing."
+
+    return "Simulation completed."
 
 
 def create_ui(backend: AppBackend) -> gr.Blocks:
-    """Create the gradio web app.
+    """Create the swarmCtrl Gradio interface."""
 
-    Args:
-        backend: The app backend. This is used to connect the UI to the simulator, AMSwarm and the
-            ROS nodes that execute the choreography.
+    warnings.filterwarnings(
+        "ignore",
+        category=UserWarning,
+        message="api_name",
+    )
 
-    Returns:
-        The UI.
-    """
-    # Ignore gradio renaming warnings
-    warnings.filterwarnings("ignore", category=UserWarning, message="api_name")
-    # Define the UI
-    with gr.Blocks(theme=gr.themes.Monochrome()) as ui:
-        gr.Markdown(""" <div align="center"> <font size = "50"> GenSwarm-GPT""", elem_id="genswarmgpt")
+    theme = gr.themes.Soft(
+        primary_hue=gr.themes.colors.green,
+        secondary_hue=gr.themes.colors.slate,
+        neutral_hue=gr.themes.colors.slate,
+    )
 
-        # Input row
-        with gr.Row():
-            padding_column()
-            with gr.Column():
-                user_prompt_input = gr.Textbox(
-                    label="What should the drones do?",
-                    placeholder="E.g.: Form a triangle at 1.5m high for 10 seconds...",
-                    lines=2,
+    with gr.Blocks(
+        theme=theme,
+        css=css,
+        title="swarmCtrl",
+        fill_width=True,
+    ) as ui:
+
+        # header
+
+        gr.HTML(
+            """
+            <div class="app-title">
+                <strong>swarmCtrl</strong>
+                <span class="subtitle">Interactive drone swarm control</span>
+            </div>
+            """,
+            elem_id="sw-header",
+        )
+
+        # initial command
+
+        with gr.Column(
+            elem_id="sw-command-section",
+        ) as command_section:
+
+            gr.Markdown(
+                "## Describe your motion",
+                elem_id="sw-command-heading",
+            )
+
+            gr.Markdown(
+                (
+                    "Tell swarmCtrl what you want your drones to do. "
+                    "Use natural language to describe their movements."
+                ),
+                elem_id="sw-command-description",
+            )
+
+            user_prompt_input = gr.Textbox(
+                label="",
+                show_label=False,
+                container=False,
+                placeholder=(
+                    "e.g. Form a circle with all drones, "
+                    "rotate clockwise for 10 seconds, "
+                    "then return to the initial positions."
+                ),
+                lines=4,
+                max_lines=8,
+                elem_id="sw-prompt",
+            )
+
+            with gr.Row(elem_id="sw-generate-row"):
+
+                start_button = gr.Button(
+                    "✦ Generate motion",
+                    variant="primary",
+                    interactive=False,
+                    scale=0,
+                    min_width=220,
+                    elem_id="sw-generate",
                 )
-            with gr.Column():
-                prompt_choices = list(backend.choreographer.prompts.keys())
-                prompt_mode = gr.Dropdown(
-                    choices=prompt_choices,
-                    label="Prompt Mode:",
-                    value=prompt_choices[0] if prompt_choices else None,
-                    visible=False,
-                    interactive=True,
+
+        # Original hidden prompt-mode component.
+
+        prompt_choices = list(
+            backend.choreographer.prompts.keys()
+        )
+
+        prompt_mode = gr.Dropdown(
+            choices=prompt_choices,
+            label="Prompt mode",
+            value=prompt_choices[0] if prompt_choices else None,
+            visible=False,
+            interactive=True,
+        )
+
+        # conversation
+
+        with gr.Column(
+            visible=False,
+            elem_id="sw-chat-section",
+        ) as chat_section:
+
+            gr.Markdown(
+                "## Conversation",
+                elem_id="sw-chat-heading",
+            )
+
+            chatbot = gr.Chatbot(
+                label="swarmCtrl",
+                height=420,
+                visible=True,
+                elem_id="sw-chat",
+            )
+
+        # refinement
+
+        with gr.Column(
+            visible=False,
+            elem_id="sw-refine-panel",
+        ) as refine_panel:
+
+            gr.Markdown(
+                "### Refine your motion",
+                elem_id="sw-refine-heading",
+            )
+
+            gr.Markdown(
+                "Describe what you'd like to change.",
+                elem_id="sw-refine-description",
+            )
+
+            message = gr.Textbox(
+                label="",
+                show_label=False,
+                container=False,
+                placeholder=(
+                    "e.g. Make the circle wider "
+                    "and slow down the rotation."
+                ),
+                lines=2,
+                max_lines=5,
+                elem_id="sw-refine-input",
+            )
+
+            with gr.Row(elem_id="sw-refine-actions"):
+
+                refine_button = gr.Button(
+                    "Apply changes",
+                    variant="primary",
+                    elem_id="sw-apply-refine",
                 )
-            padding_column()
 
-        # Interface during data processing and simulation
-        with gr.Row():
-            with gr.Column():
-                replay_msg  = centered_markdown("Replaying simulation")
-                sim_msg     = centered_markdown("Simulating safe choreography")
-                choreo_msg  = centered_markdown("LLM is generating choreography")
-
-        # Chatbot and message display
-        chatbot = gr.Chatbot(visible=False)
-        message = gr.Textbox(label="Enter prompt:", visible=False)
-
-        # Progress bar
-        with gr.Row():
-            with gr.Column():
-                progress_bar = gr.Textbox("Progress", visible=False)
-
-        # Action buttons
-        with gr.Row():
-            padding_column()
-            with gr.Column():
-                replay_sim_button = gr.Button("Replay simulation", visible=False)
-                sim_button        = gr.Button("Simulate",          visible=False)
-            with gr.Column():
-                alter_button = gr.Button("Refine/Modify the choreography", visible=False)
-            padding_column()
-
-        with gr.Row():
-            padding_column()
-            with gr.Column():
-                new_command_button = gr.Button("New Command", visible=False)
-            padding_column()
-
-        with gr.Row():
-            padding_column()
-            with gr.Column():
-                start_button      = gr.Button("Send selections to LLM", visible=False)
-                deploy_button     = gr.Button("Let the Crazyflies move", visible=False)
-                save_preset_button = gr.Button("Save preset",            visible=False)
-                show_output = gr.Checkbox(
-                    label="Display conversation with LLM",
-                    visible=False,
-                    value=False,
-                    container=True,
-                    interactive=True,
+                cancel_refine_button = gr.Button(
+                    "Cancel",
+                    elem_id="sw-cancel-refine",
                 )
-            padding_column()
 
-        # All UI elements that the reset function must touch 
-        RESETABLE_FLOW = [
-            user_prompt_input,   # 0
-            start_button,        # 1
-            sim_button,          # 2
-            alter_button,        # 3
-            new_command_button,  # 4
-            deploy_button,       # 5
-            save_preset_button,  # 6
-            chatbot,             # 7
-            choreo_msg,          # 8
-            show_output,         # 9
-            replay_sim_button,   # 10
-            sim_msg,             # 11
-            replay_msg,          # 12
-            progress_bar,        # 13
-            message,             # 14
-        ]
+        # main actions
 
-        def full_reset_ui():
-            """Return gradio updates that bring every widget back to initial state."""
-            return [
-                gr.update(value="", visible=True),   # user_prompt_input  – visible again
-                gr.update(visible=True),             # start_button – sempre visibile dopo reset
-                gr.update(visible=False),             # sim_button
-                gr.update(visible=False),             # alter_button
-                gr.update(visible=False),             # new_command_button
-                gr.update(visible=False),             # deploy_button
-                gr.update(visible=False),             # save_preset_button
-                gr.update(visible=False, value=[]),   # chatbot
-                gr.update(visible=False),             # choreo_msg
-                gr.update(visible=False, value=False),# show_output
-                gr.update(visible=False),             # replay_sim_button
-                gr.update(visible=False),             # sim_msg
-                gr.update(visible=False),             # replay_msg
-                gr.update(visible=False, value=""),   # progress_bar
-                gr.update(visible=False, value=None), # message
-            ]
+        with gr.Row(elem_id="sw-actions"):
 
-        # Show start button only when the user has typed something
+            sim_button = gr.Button(
+                "▶ Simulate",
+                variant="primary",
+                visible=False,
+                elem_id="sw-simulate",
+            )
+
+            replay_sim_button = gr.Button(
+                "↻ Replay",
+                visible=False,
+                elem_id="sw-replay",
+            )
+
+            alter_button = gr.Button(
+                "✎ Refine motion",
+                visible=False,
+                elem_id="sw-refine-button",
+            )
+
+        # simulation progress
+
+        progress_bar = gr.Textbox(
+            value="",
+            label="",
+            show_label=False,
+            container=False,
+            visible=False,
+            interactive=False,
+            elem_id="sw-progress",
+        )
+
+        # new command - deploy
+
+        with gr.Row(elem_id="sw-secondary-actions"):
+
+            new_command_button = gr.Button(
+                "＋ New command",
+                visible=False,
+                elem_id="sw-new-command",
+            )
+
+            # PRESET — TEMPORARILY DISABLED
+            #
+            # save_preset_button = gr.Button(
+            #     "Save preset",
+            #     visible=False,
+            #     elem_id="sw-save",
+            # )
+
+            deploy_button = gr.Button(
+                "Fly with real drones ↗",
+                visible=False,
+                elem_id="sw-deploy",
+            )
+
+        # event handlers
+
         user_prompt_input.change(
-            lambda x: gr.update(visible=len(x) > 0),
+            lambda text: gr.update(
+                interactive=bool(text and text.strip())
+            ),
             inputs=[user_prompt_input],
             outputs=[start_button],
         )
 
-        # start_button
-        start_button_flow = start_button.click(
-            update_visibility([False, False, True, True]),
-            [],
-            [
-                user_prompt_input, 
-                start_button, 
-                choreo_msg, 
-                show_output,
-            ],
+        generation = start_button.click(
+            lambda: gr.update(interactive=False),
+            inputs=[],
+            outputs=[start_button],
+            show_progress="hidden",
         )
-        start_button_flow = start_button_flow.success(
+
+        generation = generation.success(
             backend.initial_prompt,
             inputs=[user_prompt_input],
-            outputs=chatbot,
+            outputs=[chatbot],
         )
-        start_button_flow = start_button_flow.success(
-            update_visibility([False, True, True, True, True, True]),
-            [],
-            [
-                choreo_msg, 
-                sim_button, 
-                alter_button, 
-                new_command_button, 
-                deploy_button, 
-                save_preset_button,
+
+        generation.success(
+            lambda: (
+                gr.update(visible=False),
+                gr.update(visible=True),
+                gr.update(visible=True, interactive=True),
+                gr.update(visible=True),
+                gr.update(visible=True),
+                gr.update(visible=True),
+            ),
+            inputs=[],
+            outputs=[
+                command_section,
+                chat_section,
+                sim_button,
+                alter_button,
+                new_command_button,
+                deploy_button,
             ],
+            show_progress="hidden",
         )
 
-        # alter_button
-        alter_button_flow = alter_button.click(
-            lambda: gr.update(visible=True, value=None), [], [message]
-        )
-        alter_button_flow = alter_button_flow.success(
-            update_visibility([False, False, False, False, True]),
-            [],
-            [alter_button, deploy_button, replay_sim_button, sim_button, chatbot],
-        )
-
-        # Show output of the LLM if the checkbox is checked
-        def on_select(evt: gr.SelectData) -> dict:
-            return gr.update(visible=evt.value)
-
-        show_output.select(on_select, [], [chatbot])
-
-        # Message flow
-        message_flow = message.submit(
-            update_visibility([False, False, True]), [], [sim_msg, replay_msg, choreo_msg]
-        )
-        message_flow = message_flow.success(backend.reprompt, [message], [chatbot])
-        message_flow = message_flow.success(
-            update_visibility([False, False, True, True, False]),
-            [],
-            [alter_button, choreo_msg, sim_button, deploy_button, replay_sim_button],
-        )
-        message_flow = message_flow.success(
-            lambda: gr.update(visible=True, value=None), [], message
+        alter_button.click(
+            lambda: (
+                gr.update(visible=True),
+                gr.update(value=""),
+                gr.update(visible=False),
+            ),
+            inputs=[],
+            outputs=[
+                refine_panel,
+                message,
+                alter_button,
+            ],
+            show_progress="hidden",
         )
 
-        # Sim button flow. On click, the sim message appears and all other messages disappear
-        sim_button_flow = sim_button.click(
-            update_visibility([False, False, True, True]),
-            [],
-            [replay_msg, choreo_msg, sim_msg, progress_bar],
-        )
-        # AMSwarm is launched and the resulting trajectories are simulated
-        sim_button_flow = sim_button_flow.success(
-            lambda: run_with_bar(backend), outputs=progress_bar
+        cancel_refine_button.click(
+            lambda: (
+                gr.update(visible=False),
+                gr.update(visible=True),
+            ),
+            inputs=[],
+            outputs=[
+                refine_panel,
+                alter_button,
+            ],
+            show_progress="hidden",
         )
 
-        # The buttons reappear and the sim message disappear
-        sim_button_flow = sim_button_flow.success(
-            update_visibility([False, False, True, True, True, True, False]),
-            [],
-            [
-                sim_msg, 
-                sim_button, 
-                replay_sim_button, 
-                alter_button, 
-                deploy_button, 
-                new_command_button, 
+        def begin_refinement():
+            return gr.update(interactive=False)
+
+        def finish_refinement():
+            return (
+                gr.update(visible=False),
+                gr.update(visible=True, interactive=True),
+                gr.update(visible=True, interactive=True),
+                gr.update(interactive=True),
+                gr.update(value=""),
+                gr.update(visible=False),
+            )
+
+        def refinement_failed():
+            return gr.update(interactive=True)
+
+        def connect_refinement(trigger):
+
+            refinement = trigger(
+                begin_refinement,
+                inputs=[],
+                outputs=[refine_button],
+                show_progress="hidden",
+            )
+
+            refinement = refinement.success(
+                backend.reprompt,
+                inputs=[message],
+                outputs=[chatbot],
+            )
+
+            refinement.success(
+                finish_refinement,
+                inputs=[],
+                outputs=[
+                    refine_panel,
+                    alter_button,
+                    sim_button,
+                    refine_button,
+                    message,
+                    replay_sim_button,
+                ],
+                show_progress="hidden",
+            )
+
+            refinement.failure(
+                refinement_failed,
+                inputs=[],
+                outputs=[refine_button],
+                show_progress="hidden",
+            )
+
+        connect_refinement(refine_button.click)
+        connect_refinement(message.submit)
+
+        simulation = sim_button.click(
+            lambda: (
+                gr.update(interactive=False),
+                gr.update(visible=False),
+                gr.update(visible=True, value=""),
+            ),
+            inputs=[],
+            outputs=[
+                sim_button,
+                replay_sim_button,
                 progress_bar,
             ],
+            show_progress="hidden",
         )
 
-        # Deploy button flow
-        deploy_button.click(backend.deploy, [], chatbot)
-
-        # Save preset button flow
-        save_preset_button.click(backend.save_preset, [], [])
-
-        # Replay sim button flow 
-        # Replay reuses already computed splines - it does not reexecute axswarm
-        replay_sim_flow = replay_sim_button.click(
-            update_visibility([False, False, True, False, False, False]),
-            [],
-            [sim_msg, choreo_msg, replay_msg,
-             replay_sim_button, alter_button, new_command_button],
+        simulation = simulation.success(
+            lambda: run_with_bar(backend),
+            inputs=[],
+            outputs=[progress_bar],
+            show_progress="full",
         )
-        replay_sim_flow = replay_sim_flow.success(
+
+        simulation.success(
+            lambda: (
+                gr.update(interactive=True),
+                gr.update(visible=True),
+                gr.update(visible=False),
+            ),
+            inputs=[],
+            outputs=[
+                sim_button,
+                replay_sim_button,
+                progress_bar,
+            ],
+            show_progress="hidden",
+        )
+
+        # Recover the UI if simulation raises an exception.
+        simulation.failure(
+            lambda: (
+                gr.update(interactive=True),
+                gr.update(visible=False),
+            ),
+            inputs=[],
+            outputs=[
+                sim_button,
+                progress_bar,
+            ],
+            show_progress="hidden",
+        )
+
+        # replay
+
+        replay = replay_sim_button.click(
+            lambda: gr.update(interactive=False),
+            inputs=[],
+            outputs=[replay_sim_button],
+            show_progress="hidden",
+        )
+
+        replay = replay.success(
             backend.replay,
             inputs=[],
             outputs=[],
         )
-        replay_sim_flow = replay_sim_flow.success(
-            update_visibility([False, True, True, True]),
-            [],
-            [replay_msg, replay_sim_button, alter_button, new_command_button],
+
+        replay.success(
+            lambda: gr.update(interactive=True),
+            inputs=[],
+            outputs=[replay_sim_button],
+            show_progress="hidden",
         )
 
-        # New Command button
+        replay.failure(
+            lambda: gr.update(interactive=True),
+            inputs=[],
+            outputs=[replay_sim_button],
+            show_progress="hidden",
+        )
+
+        # deploy
+
+        deploy_button.click(
+            backend.deploy,
+            inputs=[],
+            outputs=[chatbot],
+        )
+
+        # save preset
+
+        # save_preset_button.click(
+        #     backend.save_preset,
+        #     inputs=[],
+        #     outputs=[],
+        # )
+
+        # new command
+
+        RESETABLE_FLOW = [
+            command_section,
+            user_prompt_input,
+            start_button,
+            chat_section,
+            chatbot,
+            refine_panel,
+            message,
+            sim_button,
+            replay_sim_button,
+            alter_button,
+            new_command_button,
+            deploy_button,
+            refine_button,
+            cancel_refine_button,
+            progress_bar,
+        ]
+
+        def full_reset_ui():
+            return [
+                gr.update(visible=True),
+                gr.update(value="", visible=True),
+                gr.update(interactive=False, visible=True),
+                gr.update(visible=False),
+                gr.update(value=[]),
+                gr.update(visible=False),
+                gr.update(value=""),
+                gr.update(visible=False, interactive=True),
+                gr.update(visible=False, interactive=True),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(visible=False),
+                gr.update(interactive=True),
+                gr.update(interactive=True),
+                gr.update(value="", visible=False),
+            ]
+
         new_command_button.click(
             fn=backend.reset_data,
             inputs=[],
@@ -292,6 +836,7 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
             fn=full_reset_ui,
             inputs=[],
             outputs=RESETABLE_FLOW,
+            show_progress="hidden",
         )
 
     return ui

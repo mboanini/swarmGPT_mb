@@ -111,7 +111,8 @@ class Choreographer:
         # generated = self._load_generated_primitives_content()
         # if generated:
         #     msgs.append({"role": "system", "content": generated})
-        msgs.append({"role": "user", "content": user_prompt})
+        msgs.append({"role": "system", "content": user_prompt})
+        msgs.append({"role": "user", "content": user_command})
         msgs.append({"role": "system", "content": self.prompts["example"]})
         msgs.append({"role": "system", "content": self.prompts["output_format"]})
 
