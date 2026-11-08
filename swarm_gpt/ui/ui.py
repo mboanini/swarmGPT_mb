@@ -380,7 +380,7 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
         gr.HTML(
             """
             <div class="app-title">
-                <strong>swarmCtrl</strong>
+                <strong>L2MswarmCtrl</strong>
                 <span class="subtitle">Interactive drone swarm control</span>
             </div>
             """,

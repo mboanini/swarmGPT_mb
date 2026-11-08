@@ -115,7 +115,7 @@ class Router:
             model="gpt-6-luna",
             messages=messages,
             response_format={"type": "json_object"},
-            temperature=0,
+            # temperature=0,
         )
         data = json.loads(response.choices[0].message.content)
         parts = data.get("parts", [])
