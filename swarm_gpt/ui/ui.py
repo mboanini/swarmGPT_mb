@@ -610,6 +610,13 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
             show_progress="hidden",
         )
 
+        generation.failure(
+            lambda: gr.update(interactive=True),
+            inputs=[],
+            outputs=[start_button],
+            show_progress="hidden",
+        )
+
         alter_button.click(
             lambda: (
                 gr.update(visible=True),
