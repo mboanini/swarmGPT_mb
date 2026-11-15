@@ -1,0 +1,173 @@
+# Router evaluation dataset
+
+# single action - existing system
+- {command: "form a circle at height 1.5", expected: existing_system, category: direct}
+- {command: "make a star formation at 1 meter", expected: existing_system, category: direct}
+- {command: "arrange the drones in a hexagon", expected: existing_system, category: direct}
+- {command: "form a cone", expected: existing_system, category: direct}
+- {command: "perform a helix", expected: existing_system, category: direct}
+- {command: "do a zigzag", expected: existing_system, category: direct}
+- {command: "make a wave", expected: existing_system, category: direct}
+- {command: "swap drone 1 and drone 3", expected: existing_system, category: direct}
+- {command: "move all drones up by 0.5 meters", expected: existing_system, category: direct}
+- {command: "rotate the swarm by 90 degrees around the z axis", expected: existing_system, category: direct}
+- {command: "gather all drones at their center", expected: existing_system, category: direct}
+- {command: "move drone 2 to position (1, 0, 1)", expected: existing_system, category: direct}
+- {command: "spiral outward", expected: existing_system, category: direct}
+- {command: "make a twister", expected: existing_system, category: direct}
+- {command: "make a spiral for 5 seconds", expected: existing_system, category: direct}
+- {command: "rotate the formation 180 degrees around the y axis", expected: existing_system, category: direct}
+- {command: "arrange the drones in a circle at 2 meters", expected: existing_system, category: direct}
+- {command: "do a spiral at 1.5 meters of height", expected: existing_system, category: direct}
+- {command: "swap drones 2 and 6", expected: existing_system, category: direct}
+- {command: "make a star at 150 cm", expected: existing_system, category: direct}
+- {command: "move drone 4 to x=50, y=-30, z=120", expected: existing_system, category: direct}
+- {command: "rise by 40 cm", expected: existing_system, category: direct}
+
+# single action, paraphrased - existing system
+- {command: "make a ring of drones", expected: existing_system, category: paraphrase}
+- {command: "form a triangle", expected: existing_system, category: paraphrase}
+- {command: "arrange yourselves in a square at 1 m", expected: existing_system, category: paraphrase}
+- {command: "make a pentagon", expected: existing_system, category: paraphrase}
+- {command: "go down 30 centimeters", expected: existing_system, category: paraphrase}
+- {command: "spin the formation by 45 degrees", expected: existing_system, category: paraphrase}
+- {command: "rise in a corkscrew while circling", expected: existing_system, category: paraphrase}
+- {command: "form a tornado shape and spin", expected: existing_system, category: paraphrase}
+- {command: "converge to the middle of the group", expected: existing_system, category: paraphrase}
+- {command: "drones 0 and 4 exchange places", expected: existing_system, category: paraphrase}
+- {command: "form an upside-down cone", expected: existing_system, category: paraphrase}
+- {command: "ripple like the surface of water", expected: existing_system, category: paraphrase}
+- {command: "make a cone with the tip pointing down", expected: existing_system, category: paraphrase}
+- {command: "send drone 2 to x=0.5, y=0.5, z=1.2", expected: existing_system, category: paraphrase}
+- {command: "arrange yourselves like a cone with the point facing up", expected: existing_system, category: paraphrase}
+- {command: "turn the whole formation a quarter turn", expected: existing_system, category: paraphrase}
+- {command: "put the drones on the corners of an octagon", expected: existing_system, category: paraphrase}
+- {command: "drop all drones 20 centimeters", expected: existing_system, category: paraphrase}
+- {command: "make the swarm ripple up and down like a wave", expected: existing_system, category: paraphrase}
+- {command: "bunch everyone up together in the middle", expected: existing_system, category: paraphrase}
+- {command: "have drone 1 and drone 5 trade spots", expected: existing_system, category: paraphrase}
+- {command: "spin around like a corkscrew while climbing", expected: existing_system, category: paraphrase}
+- {command: "move in a diagonal zigzag, climbing a little each time", expected: existing_system, category: paraphrase}
+
+# single action - code generation
+- {command: "form a heart shape", expected: code_generation, category: not_covered}
+- {command: "draw the letter A", expected: code_generation, category: not_covered}
+- {command: "form a straight line", expected: code_generation, category: not_covered}
+- {command: "make a grid formation", expected: code_generation, category: not_covered}
+- {command: "explore the area", expected: code_generation, category: not_covered}
+- {command: "fly a figure eight", expected: code_generation, category: not_covered}
+- {command: "form a cube", expected: code_generation, category: not_covered}
+- {command: "make a sphere", expected: code_generation, category: not_covered}
+- {command: "follow the leader drone", expected: code_generation, category: not_covered}
+- {command: "form a V formation like migrating birds", expected: code_generation, category: not_covered}
+- {command: "form a cross shape", expected: code_generation, category: not_covered}
+- {command: "write the word HI in the sky", expected: code_generation, category: not_covered}
+- {command: "align the drones in line", expected: code_generation, category: not_covered}
+- {command: "line up the drones", expected: code_generation, category: not_covered}
+- {command: "expand the current formation to double its size", expected: code_generation, category: not_covered}
+- {command: "spell the letter L", expected: code_generation, category: not_covered}
+- {command: "trace an infinity loop in the air", expected: code_generation, category: not_covered}
+- {command: "make the swarm pulsate in and out", expected: code_generation, category: not_covered}
+- {command: "split the formation sideways", expected: code_generation, category: not_covered}
+- {command: "chase a moving target", expected: code_generation, category: not_covered}
+- {command: "avoid the obstacle ahead", expected: code_generation, category: not_covered}
+- {command: "stop and hover immediately", expected: code_generation, category: not_covered}
+- {command: "form a smiley face", expected: code_generation, category: not_covered}
+- {command: "write my name in the air", expected: code_generation, category: not_covered}
+- {command: "make the drones fly a random walk", expected: code_generation, category: not_covered}
+- {command: "split the swarm into two groups that fly in opposite directions", expected: code_generation, category: not_covered}
+- {command: "make a rainbow arc", expected: code_generation, category: not_covered}
+- {command: "make a snake that follows the first drone", expected: code_generation, category: not_covered}
+- {command: "take off one drone at a time", expected: code_generation, category: not_covered}
+- {command: "form an arrow pointing north", expected: code_generation, category: not_covered}
+- {command: "fly in a straight line at constant speed to the end of the room", expected: code_generation, category: not_covered}
+- {command: "fly a figure eight", expected: code_generation, category: not_covered}
+- {command: "arrange the drones in the shape of a heart", expected: code_generation, category: not_covered}
+- {command: "position the drones in evenly spaced rows and columns", expected: code_generation, category: not_covered}
+- {command: "trace a continuous path shaped like the number eight", expected: code_generation, category: not_covered}
+- {command: "take off one drone at a time with a 2 second delay between each takeoff", expected: code_generation, category: not_covered}
+
+# hard negatives 
+- {command: "form an ellipse", expected: code_generation, category: near_miss}
+- {command: "form a crescent moon", expected: code_generation, category: near_miss}
+- {command: "form a flower with five petals", expected: code_generation, category: near_miss}
+- {command: "arrange the drones in two concentric squares", expected: code_generation, category: near_miss}
+- {command: "form a double helix like DNA with two separate strands", expected: code_generation, category: near_miss}
+- {command: "form a regular cube pattern", expected: code_generation, category: near_miss}
+- {command: "return to your initial position", expected: code_generation, category: near_miss}
+- {command: "reflect the formation shape", expected: code_generation, category: near_miss}
+- {command: "face all drones toward the center point", expected: code_generation, category: near_miss}
+- {command: "shift the entire formation 10 meters north", expected: code_generation, category: near_miss}
+- {command: "compress the formation spacing to 1 meter", expected: code_generation, category: near_miss}
+- {command: "retrace your path back to the launch point", expected: code_generation, category: near_miss}
+- {command: "land the drones one by one", expected: code_generation, category: near_miss}
+- {command: "move the whole fromation 1 meter to the left", expected: code_generation, category: near_miss}
+- {command: "go back to where you started", expected: code_generation, category: near_miss}
+- {command: "form a rectangle that is twice as long as it is wide", expected: code_generation, category: near_miss}
+- {command: "orbit around drone 1", expected: code_generation, category: near_miss}
+- {command: "move every drone 30 cm to the right", expected: code_generation, category: near_miss}
+- {command: "send drone 3 back to where it started", expected: code_generation, category: near_miss}
+- {command: "make the spiral go inward instead of outward", expected: code_generation, category: near_miss}
+- {command: "mirror the formation left to right", expected: code_generation, category: near_miss}
+- {command: "spread the drones out so the formation becomes twice as large", expected: code_generation, category: near_miss}
+- {command: "have the other drones circle around the first drone", expected: code_generation, category: near_miss}
+
+# multi actions - existing system
+- {command: "form a circle and then rise by 1 meter", expected: existing_system, category: multi_covered}
+- {command: "make a star, then rotate it by 90 degrees", expected: existing_system, category: multi_covered}
+- {command: "do a helix and finish in a cone", expected: existing_system, category: multi_covered}
+- {command: "swap drones 1 and 2, then all move to the center", expected: existing_system, category: multi_covered}
+- {command: "zigzag, then a wave, then a triangle", expected: existing_system, category: multi_covered}
+- {command: "rotate drones for 10 seconds and then form a circle for 5 seconds", expected: existing_system, category: multi_covered}
+- {command: "form a square and then rotate it by 90 degrees", expected: existing_system, category: multi_covered}
+- {command: "do a wave and then a spiral", expected: existing_system, category: multi_covered}
+- {command: "swap drones 2 and 5, then rotate everything by 90 degrees", expected: existing_system, category: multi_covered}
+- {command: "form a hexagon, then rotate it 30 degrees", expected: existing_system, category: multi_covered}
+- {command: "do a wave and afterwards gather in the middle", expected: existing_system, category: multi_covered}
+- {command: "swap drones 3 and 4, then form a star", expected: existing_system, category: multi_covered}
+- {command: "make a circle and then a twister", expected: existing_system, category: multi_covered}
+- {command: "go up 50 cm, then spiral outward", expected: existing_system, category: multi_covered}
+
+# several actions - at least one not covered
+- {command: "form a hexagon and then a heart", expected: code_generation, category: multi_mixed}
+- {command: "make a line, then a spiral", expected: code_generation, category: multi_mixed}
+- {command: "rotate by 180 degrees and then fly a figure eight", expected: code_generation, category: multi_mixed}
+- {command: "form a cube, then a sphere, then a star", expected: code_generation, category: multi_mixed}
+- {command: "descend 0.5 m and form the letter S", expected: code_generation, category: multi_mixed}
+- {command: "form a grid and then a V formation", expected: code_generation, category: multi_mixed}
+- {command: "abort the mission and land immediately", expected: code_generation, category: multi_mixed}
+- {command: "form a pyramid, then a wave", expected: code_generation, category: multi_mixed}
+- {command: "place one drone at each corner of a square, then the first drone flies to the second, and when it arrives the second flies to the third, and so on until they form a square again", expected: code_generation, category: multi_mixed}
+- {command: "form a square, then make the drones chase each other clockwise one after the other", expected: code_generation, category: multi_mixed}
+- {command: "make a diagonal line, then form a circle", expected: code_generation, category: multi_mixed}
+- {command: "form a triangle and then move it 2 meters forward", expected: code_generation, category: multi_mixed}
+- {command: "form a circle, then a heart, then land", expected: code_generation, category: multi_mixed}
+- {command: "do a helix and then write the letter K", expected: code_generation, category: multi_mixed}
+- {command: "swap drones 1 and 2, then have the swarm follow drone 3", expected: code_generation, category: multi_mixed}
+- {command: "rotate 90 degrees, then fly a lemniscate", expected: code_generation, category: multi_mixed}
+- {command: "make a wave and then split into two groups", expected: code_generation, category: multi_mixed}
+- {command: "form a cone and then slide it 2 meters to the right", expected: code_generation, category: multi_mixed}
+- {command: "go down 30 cm, form a circle, and then return home", expected: code_generation, category: multi_mixed}
+- {command: "explore the area then return to the initial positions", expected: code_generation, category: multi_mixed}
+- {command: "make a diagonal line at height 100 cm, then form a circle", expected: code_generation, category: multi_mixed}
+
+# single action with parameters (must not be split)
+- {command: "form a circle at height 2 with 6 drones", expected: existing_system, category: params}
+- {command: "spiral faster and faster for 50 steps at 1 meter", expected: existing_system, category: params}
+- {command: "helix with 30 steps rising 0.1 m per step", expected: existing_system, category: params}
+- {command: "twister with tight spacing at speed 2", expected: existing_system, category: params}
+- {command: "zigzag moving 0.2 m sideways and 0.1 m up each step", expected: existing_system, category: params}
+- {command: "scatter the drones randomly within 50 cm", expected: code_generation, category: params}
+- {command: "form a 3D sphere with an 80cm radius", expected: code_generation, category: params}
+- {command: "orbit around the point x=100, y=100", expected: code_generation, category: params}
+- {command: "execute the helix using your pre-calculated trajectory", expected: existing_system, category: params}
+- {command: "drones 3 to 6, offset your altitude by 50 cm", expected: existing_system, category: params}
+- {command: "move drones 1 to 3 down by 20cm", expected: existing_system, category: params}
+- {command: "make a hexagon at height 1.5 meters", expected: existing_system, category: params}
+- {command: "form a circle at 1.8 meters with all the drones", expected: existing_system, category: params}
+- {command: "rotate by 270 degrees around the x axis", expected: existing_system, category: params}
+- {command: "make a polygon with 7 sides at 1.4 meters", expected: existing_system, category: params}
+- {command: "twister at speed 3 with 20 cm spacing", expected: existing_system, category: params}
+- {command: "spiral outward at 1.5 meters, rotating slowly and growing to three times the radius", expected: existing_system, category: params}
+- {command: "form a circle with a radius of exactly 75 cm", expected: code_generation, category: params}
+- {command: "make a circle tilted by 45 degrees", expected: code_generation, category: params}
