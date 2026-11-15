@@ -107,10 +107,93 @@ from crazyflow.control import Control
 from crazyflow.sim import Physics, Sim
 from swarm_gpt.utils.utils import draw_line
 
+class CBFSim(Sim):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self._original_integrate = self.step_pipeline[2]
+
+        self.step_pipeline = (
+            *self.step_pipeline[:2],
+            self._integrate,
+            *self.step_pipeline[3:],
+        )
+        self.build_step_fn()
+
+    def _integrate(self, data):
+        dt = 1.0 / data.core.freq
+        predicted = self._original_integrate(data)
+
+        safe_vel = self.correct_velocity(
+            data, predicted.states.vel, dt
+        )
+
+        return predicted.replace(
+            states=predicted.states.replace(
+                pos=data.states.pos + safe_vel * dt,
+                vel=safe_vel,
+            )
+        )
+
+    cbf_d_safe = 0.20
+    cbf_kz = 2.5
+    cbf_alpha = 4.0
+    cbf_iters = 500
+    cbf_tol = 1e-4
+
+    def correct_velocity(self, data, nominal_vel, dt):
+        alpha = jnp.minimum(self.cbf_alpha, 1.0 / dt)
+        q     = jnp.array([1.0, 1.0, 1.0 / self.cbf_kz**2])
+        d2    = self.cbf_d_safe**2
+        iters = self.cbf_iters
+        tol   = self.cbf_tol
+
+        def qp_one_world(p, u_nom):                  # (N,3), (N,3)
+            n = p.shape[0]                           # statico sotto jit
+            ii, jj = np.triu_indices(n, k=1)         # coppie i<j: costanti numpy, come i for annidati
+            m = ii.shape[0]
+            rows = jnp.arange(m)
+
+            # Costruzione di G e h (vettorizzata, niente cicli Python sui valori)
+            d     = p[ii] - p[jj]                                  # (M,3)
+            h_val = jnp.sum(q * d**2, axis=-1) - d2                # (M,)
+            a     = 2.0 * q * d                                    # Lg_h sul blocco i
+            G = jnp.zeros((m, n, 3)).at[rows, ii].set(-a).at[rows, jj].set(a)
+            G = G.reshape(m, 3 * n)                                # (M, 3N)
+            hb = alpha * h_val                                     # (M,)
+            u0 = u_nom.reshape(-1)                                 # (3N,)
+
+            # Passo: L = lambda_max(G G^T), stimato con power iteration (+5% di margine)
+            GGt = G @ G.T
+            def power(_, x):
+                y = GGt @ x
+                return y / (jnp.linalg.norm(y) + 1e-12)
+            x = jax.lax.fori_loop(0, 20, power, jnp.ones(m) / jnp.sqrt(m))
+            L = 1.05 * (x @ GGt @ x) + 1e-9
+
+            # FISTA sul duale
+            def fista(_, carry):
+                lam, y, t = carry
+                u       = u0 - G.T @ y
+                lam_new = jnp.maximum(0.0, y + (G @ u - hb) / L)   # passo + proiezione su lam >= 0
+                t_new   = 0.5 * (1.0 + jnp.sqrt(1.0 + 4.0 * t * t))
+                y_new   = lam_new + ((t - 1.0) / t_new) * (lam_new - lam)
+                return lam_new, y_new, t_new
+            lam0 = jnp.zeros(m)
+            lam, _, _ = jax.lax.fori_loop(0, iters, fista, (lam0, lam0, 1.0))
+            u = u0 - G.T @ lam
+
+            # Controllo residuo e fallback: FRENA (u=0), non il nominale
+            ok = jnp.max(G @ u - hb) <= tol * (1.0 + jnp.max(jnp.abs(hb)))
+            u  = jnp.where(ok, u, jnp.zeros_like(u))
+            return u.reshape(n, 3)
+
+        return jax.vmap(qp_one_world)(data.states.pos, nominal_vel)
+
 fps          = 60
 amswarm_freq = settings["axswarm"]["freq"]
 
-sim = Sim(
+sim = CBFSim(
     n_worlds=1,
     n_drones=len(splines),
     physics=Physics.analytical,
@@ -160,11 +243,19 @@ try:
         controls = np.concatenate(
             (des_pos, des_vel, np.zeros((sim.n_drones, 7))), axis=-1
         )[None, ...]
+        
+
+
         spline_time += time.perf_counter() - _t0
 
         _t0 = time.perf_counter()
         sim.state_control(controls)
         sim.step(sim.freq // sim.control_freq)
+
+
+
+
+
         step_time += time.perf_counter() - _t0
 
         if ((i * fps) % sim.control_freq) < fps:

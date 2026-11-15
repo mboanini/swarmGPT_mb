@@ -11,7 +11,6 @@ import fire
 import sys
 sys.path.append('/data/home/crazyflie/Documents/swarmGPT_mb/')
 
-from swarm_gpt import recording
 from swarm_gpt.core import AppBackend
 from swarm_gpt.ui import create_ui
 
