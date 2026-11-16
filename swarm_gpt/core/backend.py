@@ -89,6 +89,8 @@ def self_correct(n_retries: int) -> Callable[[Callable[P, R]], Callable[P, R]]:
 # Script Python che gira nel subprocess figlio.
 # Viene passato come stringa a `python -c "..."`.
 _VIZ_SCRIPT = """
+from pathlib import Path
+import json
 import sys, pickle, logging
 logging.basicConfig(level=logging.WARNING)
 
@@ -100,17 +102,172 @@ splines   = payload["splines"]    # dict drone -> list of scipy splines
 settings  = payload["settings"]
 duration  = payload["duration"]
 
+output_dir = Path(payload["output_dir"])
+output_dir.mkdir(parents=True, exist_ok=True)
+
+ENABLE_CBF = payload.get("enable_cbf", True)
+print(f"[CBF MODE] {'ON' if ENABLE_CBF else 'OFF'}", flush=True)
+
 from collections import deque
 import time
+import jax
+import jax.numpy as jnp
 import numpy as np
 from crazyflow.control import Control
 from crazyflow.sim import Physics, Sim
 from swarm_gpt.utils.utils import draw_line
 
+from functools import partial
+from crazyflow.sim.sim import (
+    generate_control_fn,
+    generate_wrench_fn,
+    generate_physics_fn,
+    generate_sync_fn,
+)
+
+# for testing
+
+def compute_safety_metrics(pos, d_safe=0.20, kz=2.5):
+    # pos: (N, 3), posizioni dei droni in metri
+    n = pos.shape[0]
+    ii, jj = np.triu_indices(n, k=1)
+
+    diff = pos[ii] - pos[jj]
+
+    # Distanza euclidea
+    distances = np.linalg.norm(diff, axis=1)
+
+    # Stessa barriera utilizzata nel tuo QP
+    q = np.array([1.0, 1.0, 1.0 / kz**2])
+    h = np.sum(q * diff**2, axis=1) - d_safe**2
+
+    return (
+        np.min(h),
+        np.min(distances),
+        np.sum(h < 0),
+    )
+# end
+
+
+class CBFSim(Sim):
+    def build_step_fn(self):
+        control_fn = generate_control_fn(self.control)
+        wrench_fn = generate_wrench_fn(self.physics)
+        disturbance_fn = self.disturbance_fn
+        self._original_integrate = generate_physics_fn(
+            self.physics, self.integrator
+        )
+        sync_fn = generate_sync_fn(self.physics)
+
+        def single_step(data, _):
+            data = control_fn(data)
+            data = wrench_fn(data)
+            data = disturbance_fn(data)
+            data = self._integrate(data)
+            data = data.replace(core=data.core.replace(steps=data.core.steps + 1))
+            return sync_fn(data), None
+
+        @partial(jax.jit, static_argnames="n_steps")
+        def step(data, n_steps=1):
+            optimize_mjx_model = data.mjx_model is None
+            if optimize_mjx_model:
+                data = data.replace(mjx_model=self.mjx_model)
+
+            data = self.sync_sim2mjx(data)
+            data, _ = jax.lax.scan(single_step, data, length=n_steps)
+
+            if optimize_mjx_model:
+                data = data.replace(mjx_model=None)
+            return data
+
+        self._step = step
+
+    def _integrate(self, data):
+        dt = 1.0 / data.core.freq
+        predicted = self._original_integrate(data)
+
+        nominal_vel = predicted.states.vel
+
+        if ENABLE_CBF:
+            safe_vel = self.correct_velocity(
+                        data, nominal_vel, dt
+                    )
+        else:
+            safe_vel = nominal_vel
+        
+        jax.debug.print(
+            "[INTEGRATION] pos_diff={:.8f}",
+            jnp.max(jnp.abs(predicted.states.pos - (data.states.pos + safe_vel * dt)))
+        )
+
+        return predicted.replace(
+            states=predicted.states.replace(
+                pos=data.states.pos + safe_vel * dt,
+                vel=safe_vel,
+            )
+        )
+
+    cbf_d_safe = 0.20
+    cbf_kz = 2.5
+    cbf_alpha = 4.0
+    cbf_iters = 500
+    cbf_tol = 1e-4
+
+    def correct_velocity(self, data, nominal_vel, dt):
+        alpha = jnp.minimum(self.cbf_alpha, 1.0 / dt)
+        q     = jnp.array([1.0, 1.0, 1.0 / self.cbf_kz**2])
+        d2    = self.cbf_d_safe**2
+        iters = self.cbf_iters
+        tol   = self.cbf_tol
+
+        def qp_one_world(p, u_nom):                  # (N,3), (N,3)
+            n = p.shape[0]                           # statico sotto jit
+            ii, jj = np.triu_indices(n, k=1)         # coppie i<j: costanti numpy, come i for annidati
+            m = ii.shape[0]
+            rows = jnp.arange(m)
+
+            # Costruzione di G e h (vettorizzata, niente cicli Python sui valori)
+            d     = p[ii] - p[jj]                                  # (M,3)
+            h_val = jnp.sum(q * d**2, axis=-1) - d2                # (M,)
+            a     = 2.0 * q * d                                    # Lg_h sul blocco i
+            G = jnp.zeros((m, n, 3)).at[rows, ii].set(-a).at[rows, jj].set(a)
+            G = G.reshape(m, 3 * n)                                # (M, 3N)
+            hb = alpha * h_val                                     # (M,)
+            u0 = u_nom.reshape(-1)                                 # (3N,)
+
+            # Passo: L = lambda_max(G G^T), stimato con power iteration (+5% di margine)
+            GGt = G @ G.T
+            def power(_, x):
+                y = GGt @ x
+                return y / (jnp.linalg.norm(y) + 1e-12)
+            x = jax.lax.fori_loop(0, 20, power, jnp.ones(m) / jnp.sqrt(m))
+            L = 1.05 * (x @ GGt @ x) + 1e-9
+
+            # FISTA sul duale
+            def fista(_, carry):
+                lam, y, t = carry
+                u       = u0 - G.T @ y
+                lam_new = jnp.maximum(0.0, y + (G @ u - hb) / L)   # passo + proiezione su lam >= 0
+                t_new   = 0.5 * (1.0 + jnp.sqrt(1.0 + 4.0 * t * t))
+                y_new   = lam_new + ((t - 1.0) / t_new) * (lam_new - lam)
+                return lam_new, y_new, t_new
+            lam0 = jnp.zeros(m)
+            lam, _, _ = jax.lax.fori_loop(0, iters, fista, (lam0, lam0, 1.0))
+            u = u0 - G.T @ lam
+
+            # Controllo residuo e fallback: FRENA (u=0), non il nominale
+            residual = jnp.max(G @ u - hb)
+            threshold = tol * (1.0 + jnp.max(jnp.abs(hb)))
+            ok =  residual <= threshold  
+            u  = jnp.where(ok, u, jnp.zeros_like(u))
+            return u.reshape(n, 3)
+
+        return jax.vmap(qp_one_world)(data.states.pos, nominal_vel)
+
 fps          = 60
 amswarm_freq = settings["axswarm"]["freq"]
 
-sim = Sim(
+sim = CBFSim(
     n_worlds=1,
     n_drones=len(splines),
     physics=Physics.analytical,
@@ -144,6 +301,14 @@ trace = VizTrace.from_env(sim, splines, duration)
 tstart   = time.time()
 n_steps  = int(duration * sim.control_freq)
 
+# ------------for cbf comparison------------
+safety_times = []
+safety_positions = []
+safety_min_h = []
+safety_min_distance = []
+safety_violations = []
+# ------------
+
 # --- Diagnostica temporanea: misura dove va il tempo reale del loop -------
 spline_time   = 0.0
 step_time     = 0.0
@@ -169,6 +334,24 @@ try:
         _t0 = time.perf_counter()
         sim.state_control(controls)
         sim.step(sim.freq // sim.control_freq)
+        # ------------ cbf comparison ------------
+        actual_pos = np.asarray(
+            sim.data.states.pos[0]
+        ).copy()
+
+        min_h, min_distance, violations = compute_safety_metrics(
+            actual_pos,
+            d_safe=0.20,
+            kz=2.5,
+        )
+        # ------------
+
+        safety_times.append((i + 1) / sim.control_freq)
+        safety_positions.append(actual_pos)
+        safety_min_h.append(min_h)
+        safety_min_distance.append(min_distance)
+        safety_violations.append(violations)
+
         step_time += time.perf_counter() - _t0
         if trace is not None:
             trace.record(ct, controls, sim)
@@ -200,6 +383,48 @@ finally:
         f"draw_line={draw_time:.2f}s mj_render={mjrender_time:.2f}s slept={sleep_time:.2f}s",
         flush=True,
     )
+
+    # ------------ for cbf comparison ------------
+
+    mode = "cbf_on" if ENABLE_CBF else "cbf_off"
+
+    times = np.asarray(safety_times)
+    positions = np.asarray(safety_positions)
+    min_h = np.asarray(safety_min_h)
+    min_distance = np.asarray(safety_min_distance)
+    violations = np.asarray(safety_violations)
+
+    np.savez_compressed(
+        output_dir / f"{mode}.npz",
+        timestamps=times,
+        positions=positions,
+        min_h=min_h,
+        min_distance=min_distance,
+        violations=violations,
+        enable_cbf=ENABLE_CBF,
+    )
+
+    summary = {
+        "enable_cbf": ENABLE_CBF,
+        "num_samples": int(len(times)),
+        "min_h": float(np.min(min_h)),
+        "min_distance_m": float(np.min(min_distance)),
+        "samples_with_violations": int(np.sum(violations > 0)),
+        "total_pair_violations": int(np.sum(violations)),
+    }
+
+    with open(output_dir / f"{mode}_summary.json", "w") as f:
+        json.dump(summary, f, indent=2)
+
+    print(
+        f"[SAFETY] {mode} | "
+        f"min_h={summary['min_h']:.6f} | "
+        f"min_distance={summary['min_distance_m']:.4f} m | "
+        f"violating_samples={summary['samples_with_violations']}",
+        flush=True,
+    )
+    # ------------
+
     sim.close()
 """
 
@@ -272,7 +497,7 @@ class AppBackend:
                 pass
             self._viz_data_path = None
 
-    def _start_viz(self, splines: dict, duration: float) -> None:
+    def _start_viz(self, splines: dict, duration: float, enable_cbf: bool = True, output_dir: Path | None = None,) -> None:
         """Kill any existing visualizer, serialize splines to disk, launch new subprocess."""
         self._stop_viz()
 
@@ -281,6 +506,8 @@ class AppBackend:
             "splines": {k: list(v) for k, v in splines.items()},
             "settings": dict(self.settings),
             "duration": duration,
+            "enable_cbf": enable_cbf,
+            "output_dir": str(output_dir),
         }
         fd, tmp_path = tempfile.mkstemp(suffix=".pkl", prefix="swarmgpt_viz_")
         try:
@@ -454,7 +681,35 @@ class AppBackend:
         print(f"[DEBUG backend] splines built for drones: {list(self.splines.keys())}")
 
         if gui:
-            self._start_viz(self.splines, float(t[-1]))
+        #     self._start_viz(self.splines, float(t[-1]))
+            duration = float(t[-1])
+
+            output_dir = (
+                self.root_path
+                / "experiments"
+                / "cbf_comparisons"
+                / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            )
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            for enable_cbf in (False, True):
+                mode = "ON" if enable_cbf else "OFF"
+                logger.info("Starting Crazyflow CBF %s", mode)
+
+                self._start_viz(
+                    self.splines,
+                    duration,
+                    enable_cbf=enable_cbf,
+                    output_dir=output_dir,
+                )
+
+                rc = self._viz_proc.wait()
+                if rc != 0:
+                    raise RuntimeError(
+                        f"Crazyflow CBF {mode} failed: {rc}"
+                    )
+
+            logger.info("CBF comparison saved to %s", output_dir)
 
         logger.info("Simulation successful")
         return sim_data
