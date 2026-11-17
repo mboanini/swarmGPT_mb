@@ -44,6 +44,58 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 
+def correct_velocity(positions, nominal_velocity, dt):
+    """Filter one swarm (N, 3), checking OSQP's result in the input precision."""
+    from osqp import OSQPException
+    from qpsolvers import solve_qp
+    from qpsolvers.exceptions import SolverError
+    from scipy import sparse
+
+    positions = np.asarray(positions)
+    nominal_velocity = np.asarray(nominal_velocity)
+    dtype = np.result_type(positions.dtype, nominal_velocity.dtype, np.float32)
+    positions = positions.astype(dtype, copy=False)
+    nominal_velocity = nominal_velocity.astype(dtype, copy=False)
+    n = len(positions)
+    d_safe, kz, alpha, tol = 0.20, 2.5, 4.0, 1e-4  # Same as CBFSim.
+    w = np.array([1.0, 1.0, 1.0 / kz**2], dtype=dtype)
+    G, hb = [], []
+    for i in range(n):
+        for j in range(i + 1, n):
+            d = positions[i] - positions[j]
+            h_val = np.sum(w * d**2) - dtype.type(d_safe**2)
+            Lf_h = 0
+            g_i = np.zeros((3, 3 * n), dtype=dtype)
+            g_j = np.zeros((3, 3 * n), dtype=dtype)
+            g_i[:, 3*i:3*i+3] = np.eye(3)
+            g_j[:, 3*j:3*j+3] = np.eye(3)
+            Lg_h = (2.0 * w * d) @ (g_i - g_j)
+            G.append(-Lg_h)
+            hb.append(Lf_h + min(alpha, 1.0 / float(dt)) * h_val)
+    G = np.asarray(G, dtype=dtype).reshape(-1, 3 * n)
+    hb = np.asarray(hb, dtype=dtype)
+    candidate = nominal_velocity.reshape(-1)
+    if len(G):
+        try:
+            candidate = solve_qp(
+                sparse.eye(3 * n, format="csc"),
+                -nominal_velocity.reshape(-1).astype(np.float64),
+                sparse.csc_matrix(G, dtype=np.float64), hb.astype(np.float64),
+                solver="osqp",
+            )
+        except (SolverError, OSQPException):
+            candidate = None
+    if candidate is None:
+        candidate = np.full(3 * n, np.nan, dtype=dtype)
+    # In Crazyflow this casts the solution back to the simulator precision first.
+    candidate = np.asarray(candidate, dtype=dtype)
+    residual = np.max(G @ candidate - hb, initial=-np.inf)
+    threshold = tol * (1.0 + np.max(np.abs(hb), initial=0.0))
+    fallback = not (np.all(np.isfinite(candidate)) and residual <= threshold)
+    velocity = np.zeros_like(nominal_velocity) if fallback else candidate.reshape(n, 3)
+    return velocity, dict(residual=float(residual), threshold=float(threshold), fallback=fallback)
+
+
 def self_correct(n_retries: int) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Create a decorator that retries a function n times if it fails."""
 
@@ -105,8 +157,11 @@ duration  = payload["duration"]
 output_dir = Path(payload["output_dir"])
 output_dir.mkdir(parents=True, exist_ok=True)
 
-ENABLE_CBF = payload.get("enable_cbf", True)
-print(f"[CBF MODE] {'ON' if ENABLE_CBF else 'OFF'}", flush=True)
+CBF_MODE = payload.get("cbf_mode", "osqp")
+if CBF_MODE not in ("off", "osqp"):
+    raise ValueError(f"Unknown CBF mode: {CBF_MODE}")
+ENABLE_CBF = CBF_MODE != "off"
+print(f"[CBF MODE] {CBF_MODE.upper()}", flush=True)
 
 from collections import deque
 import time
@@ -116,6 +171,8 @@ import numpy as np
 from crazyflow.control import Control
 from crazyflow.sim import Physics, Sim
 from swarm_gpt.utils.utils import draw_line
+from swarm_gpt.core.backend import correct_velocity
+
 
 from functools import partial
 from crazyflow.sim.sim import (
@@ -125,11 +182,13 @@ from crazyflow.sim.sim import (
     generate_sync_fn,
 )
 
-# for testing
+# ------------for testing------------
 
 def compute_safety_metrics(pos, d_safe=0.20, kz=2.5):
     # pos: (N, 3), posizioni dei droni in metri
     n = pos.shape[0]
+    if n < 2:
+        return np.inf, np.inf, 0
     ii, jj = np.triu_indices(n, k=1)
 
     diff = pos[ii] - pos[jj]
@@ -146,38 +205,68 @@ def compute_safety_metrics(pos, d_safe=0.20, kz=2.5):
         np.min(distances),
         np.sum(h < 0),
     )
-# end
+# ------------end------------
 
 
 class CBFSim(Sim):
+    # These settings are fixed for each instance, before building the JAX functions.
+    cbf_d_safe = 0.20
+    cbf_kz = 2.5
+    cbf_alpha = 4.0
+    cbf_tol = 1e-4
+
+    def __init__(self, *args, cbf_mode="osqp", **kwargs):
+        if cbf_mode not in ("off", "osqp"):
+            raise ValueError(f"Unknown CBF mode: {cbf_mode}")
+        self.cbf_mode = cbf_mode
+        self.last_cbf_diagnostics = None
+        super().__init__(*args, **kwargs)
+
     def build_step_fn(self):
         control_fn = generate_control_fn(self.control)
         wrench_fn = generate_wrench_fn(self.physics)
         disturbance_fn = self.disturbance_fn
-        self._original_integrate = generate_physics_fn(
-            self.physics, self.integrator
-        )
+        self._original_integrate = jax.jit(generate_physics_fn(self.physics, self.integrator))
         sync_fn = generate_sync_fn(self.physics)
 
+        @jax.jit
+        def control_and_wrench(data):
+            return wrench_fn(control_fn(data))
+
         def single_step(data, _):
-            data = control_fn(data)
-            data = wrench_fn(data)
+            data = control_and_wrench(data)
             data = disturbance_fn(data)
-            data = self._integrate(data)
+            data, diagnostics = self._integrate(data)
             data = data.replace(core=data.core.replace(steps=data.core.steps + 1))
-            return sync_fn(data), None
+            data = sync_fn(data)
+            diagnostics = dict(diagnostics, positions=data.states.pos,
+                               velocities=data.states.vel,
+                               steps=data.core.steps.reshape(self.n_worlds))
+            return data, diagnostics
 
         @partial(jax.jit, static_argnames="n_steps")
+        def step_jax(data, n_steps=1):
+            return jax.lax.scan(single_step, data, length=n_steps)
+
         def step(data, n_steps=1):
             optimize_mjx_model = data.mjx_model is None
             if optimize_mjx_model:
                 data = data.replace(mjx_model=self.mjx_model)
-
             data = self.sync_sim2mjx(data)
-            data, _ = jax.lax.scan(single_step, data, length=n_steps)
 
+            if self.cbf_mode == "osqp":
+                # Carry the ENTIRE corrected SimData, including controller memory,
+                # from one physical substep into the next. References stay at 80 Hz.
+                diagnostics = []
+                for _ in range(n_steps):
+                    data, sample = single_step(data, None)
+                    diagnostics.append(sample)
+                diagnostics = jax.tree.map(lambda *xs: jnp.stack(xs), *diagnostics)
+            else:
+                data, diagnostics = step_jax(data, n_steps=n_steps)
             if optimize_mjx_model:
                 data = data.replace(mjx_model=None)
+            self.last_cbf_diagnostics = diagnostics
             return data
 
         self._step = step
@@ -185,89 +274,42 @@ class CBFSim(Sim):
     def _integrate(self, data):
         dt = 1.0 / data.core.freq
         predicted = self._original_integrate(data)
-
         nominal_vel = predicted.states.vel
 
-        if ENABLE_CBF:
-            safe_vel = self.correct_velocity(
-                        data, nominal_vel, dt
-                    )
+        if self.cbf_mode == "osqp":
+            safe_vel, diagnostics = self.correct_velocity_osqp(
+                data, nominal_vel, dt
+            )
         else:
             safe_vel = nominal_vel
-        
-        jax.debug.print(
-            "[INTEGRATION] pos_diff={:.8f}",
-            jnp.max(jnp.abs(predicted.states.pos - (data.states.pos + safe_vel * dt)))
-        )
+            diagnostics = dict(residual=jnp.full((self.n_worlds,), jnp.nan),
+                               threshold=jnp.full((self.n_worlds,), jnp.nan),
+                               fallback=jnp.zeros((self.n_worlds,), dtype=bool))
 
-        return predicted.replace(
+        result = predicted.replace(
             states=predicted.states.replace(
                 pos=data.states.pos + safe_vel * dt,
                 vel=safe_vel,
             )
         )
+        diagnostics = dict(diagnostics, nominal_velocities=nominal_vel)
+        return result, diagnostics
 
-    cbf_d_safe = 0.20
-    cbf_kz = 2.5
-    cbf_alpha = 4.0
-    cbf_iters = 500
-    cbf_tol = 1e-4
-
-    def correct_velocity(self, data, nominal_vel, dt):
-        alpha = jnp.minimum(self.cbf_alpha, 1.0 / dt)
-        q     = jnp.array([1.0, 1.0, 1.0 / self.cbf_kz**2])
-        d2    = self.cbf_d_safe**2
-        iters = self.cbf_iters
-        tol   = self.cbf_tol
-
-        def qp_one_world(p, u_nom):                  # (N,3), (N,3)
-            n = p.shape[0]                           # statico sotto jit
-            ii, jj = np.triu_indices(n, k=1)         # coppie i<j: costanti numpy, come i for annidati
-            m = ii.shape[0]
-            rows = jnp.arange(m)
-
-            # Costruzione di G e h (vettorizzata, niente cicli Python sui valori)
-            d     = p[ii] - p[jj]                                  # (M,3)
-            h_val = jnp.sum(q * d**2, axis=-1) - d2                # (M,)
-            a     = 2.0 * q * d                                    # Lg_h sul blocco i
-            G = jnp.zeros((m, n, 3)).at[rows, ii].set(-a).at[rows, jj].set(a)
-            G = G.reshape(m, 3 * n)                                # (M, 3N)
-            hb = alpha * h_val                                     # (M,)
-            u0 = u_nom.reshape(-1)                                 # (3N,)
-
-            # Passo: L = lambda_max(G G^T), stimato con power iteration (+5% di margine)
-            GGt = G @ G.T
-            def power(_, x):
-                y = GGt @ x
-                return y / (jnp.linalg.norm(y) + 1e-12)
-            x = jax.lax.fori_loop(0, 20, power, jnp.ones(m) / jnp.sqrt(m))
-            L = 1.05 * (x @ GGt @ x) + 1e-9
-
-            # FISTA sul duale
-            def fista(_, carry):
-                lam, y, t = carry
-                u       = u0 - G.T @ y
-                lam_new = jnp.maximum(0.0, y + (G @ u - hb) / L)   # passo + proiezione su lam >= 0
-                t_new   = 0.5 * (1.0 + jnp.sqrt(1.0 + 4.0 * t * t))
-                y_new   = lam_new + ((t - 1.0) / t_new) * (lam_new - lam)
-                return lam_new, y_new, t_new
-            lam0 = jnp.zeros(m)
-            lam, _, _ = jax.lax.fori_loop(0, iters, fista, (lam0, lam0, 1.0))
-            u = u0 - G.T @ lam
-
-            # Controllo residuo e fallback: FRENA (u=0), non il nominale
-            residual = jnp.max(G @ u - hb)
-            threshold = tol * (1.0 + jnp.max(jnp.abs(hb)))
-            ok =  residual <= threshold  
-            u  = jnp.where(ok, u, jnp.zeros_like(u))
-            return u.reshape(n, 3)
-
-        return jax.vmap(qp_one_world)(data.states.pos, nominal_vel)
+    def correct_velocity_osqp(self, data, nominal_vel, dt):
+        velocities, diagnostics = [], []
+        for p, u_nom in zip(data.states.pos, nominal_vel):
+            safe, sample = correct_velocity(np.asarray(p), np.asarray(u_nom), dt)
+            velocities.append(jnp.asarray(safe, dtype=u_nom.dtype))
+            diagnostics.append(sample)
+        safe = jnp.stack(velocities)
+        diagnostics = jax.tree.map(lambda *xs: jnp.stack(xs), *diagnostics)
+        return safe, diagnostics
 
 fps          = 60
 amswarm_freq = settings["axswarm"]["freq"]
 
 sim = CBFSim(
+    cbf_mode=CBF_MODE,
     n_worlds=1,
     n_drones=len(splines),
     physics=Physics.analytical,
@@ -279,12 +321,20 @@ sim = CBFSim(
 )
 sim.max_visual_geom = 100_000
 sim.reset()
-sim.state_control(__import__("numpy").random.random((1, sim.n_drones, 13)))
+sim.state_control(np.random.default_rng(0).random((1, sim.n_drones, 13)))
 sim.step(sim.freq // sim.control_freq)
+jax.block_until_ready(sim.data)
 sim.reset()
+assert sim.freq % sim.control_freq == 0
+reference_freq = payload.get("reference_freq") or sim.control_freq
+if reference_freq <= 0 or sim.control_freq % reference_freq != 0:
+    raise ValueError("Reference frequency must divide the controller frequency")
+reference_stride = int(sim.control_freq / reference_freq)
 
 vel_splines = {k: [s.derivative() for s in v] for k, v in splines.items()}
 pos = np.array([[s(0) for s in splines[j]] for j in splines])[None, ...]
+if payload.get("initial_positions") is not None:
+    pos = np.asarray(payload["initial_positions"])[None, ...]
 sim.data = sim.data.replace(
     states=sim.data.states.replace(pos=sim.data.states.pos.at[...].set(pos))
 )
@@ -307,6 +357,8 @@ safety_positions = []
 safety_min_h = []
 safety_min_distance = []
 safety_violations = []
+physics_logs = []
+step_wall_seconds = []
 # ------------
 
 # --- Diagnostica temporanea: misura dove va il tempo reale del loop -------
@@ -324,16 +376,21 @@ try:
         ct = i / sim.control_freq
 
         _t0 = time.perf_counter()
-        des_pos = np.array([[s(ct) for s in splines[j]] for j in splines])
-        des_vel = np.array([[s(ct) for s in vel_splines[j]] for j in splines])
-        controls = np.concatenate(
-            (des_pos, des_vel, np.zeros((sim.n_drones, 7))), axis=-1
-        )[None, ...]
+        if i % reference_stride == 0:
+            des_pos = np.array([[s(ct) for s in splines[j]] for j in splines])
+            des_vel = np.array([[s(ct) for s in vel_splines[j]] for j in splines])
+            controls = np.concatenate(
+                (des_pos, des_vel, np.zeros((sim.n_drones, 7))), axis=-1
+            )[None, ...]
         spline_time += time.perf_counter() - _t0
 
         _t0 = time.perf_counter()
-        sim.state_control(controls)
+        if i % reference_stride == 0:
+            sim.state_control(controls)
         sim.step(sim.freq // sim.control_freq)
+        jax.block_until_ready((sim.data, sim.last_cbf_diagnostics))
+        step_wall_seconds.append(time.perf_counter() - _t0)
+        physics_logs.append(jax.tree.map(np.asarray, sim.last_cbf_diagnostics))
         # ------------ cbf comparison ------------
         actual_pos = np.asarray(
             sim.data.states.pos[0]
@@ -356,7 +413,7 @@ try:
         if trace is not None:
             trace.record(ct, controls, sim)
 
-        if ((i * fps) % sim.control_freq) < fps:
+        if payload.get("render", True) and ((i * fps) % sim.control_freq) < fps:
             _t0 = time.perf_counter()
             for j, dq in enumerate(swarm_pos):
                 dq.append(np.asarray(sim.data.states.pos[0, j]))
@@ -386,13 +443,38 @@ finally:
 
     # ------------ for cbf comparison ------------
 
-    mode = "cbf_on" if ENABLE_CBF else "cbf_off"
+    mode = f"cbf_{CBF_MODE}"
 
     times = np.asarray(safety_times)
     positions = np.asarray(safety_positions)
     min_h = np.asarray(safety_min_h)
     min_distance = np.asarray(safety_min_distance)
     violations = np.asarray(safety_violations)
+
+    # Each sample below is one physical step (400 Hz), unlike the 80 Hz traces above.
+    physics = {
+        key: np.concatenate([batch[key] for batch in physics_logs], axis=0)[:, 0]
+        for key in ("positions", "velocities", "nominal_velocities", "steps",
+                    "residual", "threshold", "fallback")
+    } if physics_logs else {}
+    physics_metrics = np.asarray([
+        compute_safety_metrics(p, sim.cbf_d_safe, sim.cbf_kz)
+        for p in physics.get("positions", [])
+    ]).reshape(-1, 3)
+    physics_fields = {f"physics_{key}": value for key, value in physics.items()}
+    physics_fields.update(
+        physics_timestamps=physics.get("steps", np.array([])) / sim.freq,
+        physics_min_h=physics_metrics[:, 0],
+        physics_min_distance=physics_metrics[:, 1],
+        physics_violations=physics_metrics[:, 2].astype(int),
+    )
+    spline_times = np.r_[0.0, physics_fields["physics_timestamps"]]
+    spline_positions = np.stack([
+        np.stack([s(spline_times) for s in axes], axis=-1) for axes in splines.values()
+    ], axis=1)
+    spline_metrics = np.asarray([
+        compute_safety_metrics(p, sim.cbf_d_safe, sim.cbf_kz) for p in spline_positions
+    ])
 
     np.savez_compressed(
         output_dir / f"{mode}.npz",
@@ -402,13 +484,40 @@ finally:
         min_distance=min_distance,
         violations=violations,
         enable_cbf=ENABLE_CBF,
+        cbf_mode=CBF_MODE,
+        step_wall_seconds=np.asarray(step_wall_seconds),
+        initial_positions=pos[0],
+        offline_fallback_count=payload.get("offline_fallback_count", 0),
+        spline_timestamps=spline_times,
+        spline_positions=spline_positions,
+        spline_min_h=spline_metrics[:, 0],
+        spline_violations=spline_metrics[:, 2].astype(int),
+        **physics_fields,
     )
 
     summary = {
         "enable_cbf": ENABLE_CBF,
+        "cbf_mode": CBF_MODE,
+        "sim_freq_hz": sim.freq,
+        "reference_freq_hz": reference_freq,
+        "state_freq_hz": sim.control_freq,
+        "spline_min_h": float(np.min(spline_metrics[:, 0])),
+        "spline_samples_with_violations": int(np.sum(spline_metrics[:, 2] > 0)),
+        "cbf_params": {"d_safe": sim.cbf_d_safe, "kz": sim.cbf_kz,
+                       "alpha": sim.cbf_alpha, "tol": sim.cbf_tol,
+                       "fallback": "zero_velocity"},
+        "solver_params": ({"settings": "osqp_defaults"} if CBF_MODE == "osqp" else {}),
+        "physics_num_samples": int(len(physics_metrics)),
+        "fallback_count": int(np.sum(physics.get("fallback", []))),
+        "offline_fallback_count": int(payload.get("offline_fallback_count", 0)),
+        "physics_min_h": float(np.min(physics_metrics[:, 0])) if len(physics_metrics) else None,
+        "physics_samples_with_violations": int(np.sum(physics_metrics[:, 2] > 0)),
+        "step_wall_seconds_total": float(np.sum(step_wall_seconds)),
+        "step_timing_scope": "state_control + five physics steps + diagnostics synchronization; "
+                             "excludes warmup, spline evaluation, rendering and file writes",
         "num_samples": int(len(times)),
-        "min_h": float(np.min(min_h)),
-        "min_distance_m": float(np.min(min_distance)),
+        "min_h": float(np.min(min_h)) if len(min_h) else None,
+        "min_distance_m": float(np.min(min_distance)) if len(min_distance) else None,
         "samples_with_violations": int(np.sum(violations > 0)),
         "total_pair_violations": int(np.sum(violations)),
     }
@@ -418,9 +527,11 @@ finally:
 
     print(
         f"[SAFETY] {mode} | "
-        f"min_h={summary['min_h']:.6f} | "
-        f"min_distance={summary['min_distance_m']:.4f} m | "
-        f"violating_samples={summary['samples_with_violations']}",
+        f"min_h={summary['min_h']} | "
+        f"min_distance={summary['min_distance_m']} m | "
+        f"violating_samples={summary['samples_with_violations']} | "
+        f"fallbacks={summary['fallback_count']} | "
+        f"offline_fallbacks={summary['offline_fallback_count']}",
         flush=True,
     )
     # ------------
@@ -457,6 +568,10 @@ class AppBackend:
         # Initialize drone control elements
         self.waypoints = None # High-level LLM commands
         self.splines: dict = {} # Low-level optimized commands from axswarm
+        self.offline_corrected_splines: dict = {}  # smoothing lambda -> drone -> xyz splines
+        self.offline_fallback_count = 0
+        self._offline_deploy_duration: float | None = None
+        self._offline_deploy_waypoints: bytes | None = None
         
         self.drone_controller = DroneController(10) # Controller for the Crazyflie drones
         # Initialize chat elements
@@ -497,8 +612,15 @@ class AppBackend:
                 pass
             self._viz_data_path = None
 
-    def _start_viz(self, splines: dict, duration: float, enable_cbf: bool = True, output_dir: Path | None = None,) -> None:
+    def _start_viz(
+        self, splines: dict, duration: float, cbf_mode: Literal["off", "osqp"] = "osqp",
+        output_dir: Path | None = None,
+        *, reference_freq: int | None = None, initial_positions: np.ndarray | None = None,
+        offline_fallback_count: int = 0,
+    ) -> None:
         """Kill any existing visualizer, serialize splines to disk, launch new subprocess."""
+        if cbf_mode not in ("off", "osqp"):
+            raise ValueError(f"Unknown CBF mode: {cbf_mode}")
         self._stop_viz()
 
         # Serializza le splines in un file temporaneo (pickle supporta oggetti scipy)
@@ -506,8 +628,11 @@ class AppBackend:
             "splines": {k: list(v) for k, v in splines.items()},
             "settings": dict(self.settings),
             "duration": duration,
-            "enable_cbf": enable_cbf,
+            "cbf_mode": cbf_mode,
             "output_dir": str(output_dir),
+            "reference_freq": reference_freq,
+            "initial_positions": initial_positions,
+            "offline_fallback_count": offline_fallback_count,
         }
         fd, tmp_path = tempfile.mkstemp(suffix=".pkl", prefix="swarmgpt_viz_")
         try:
@@ -649,9 +774,14 @@ class AppBackend:
         """Run axswarm, build splines, then launch visualizer in a fresh subprocess."""
         logger.info("Simulating trajectories with axswarm")
         self.splines.clear()
+        self.offline_corrected_splines.clear()
+        self.offline_fallback_count = 0
+        self._offline_deploy_duration = None
+        self._offline_deploy_waypoints = None
         if hasattr(self, "sim_results"):
             del self.sim_results
         assert self.waypoints is not None, "Please generate a choreography first"
+        simulated_waypoints = pickle.dumps(self.waypoints)
 
         sim_data = None
         for key, data, total in simulate_axswarm(self.waypoints, self.settings, gui=False):
@@ -663,6 +793,30 @@ class AppBackend:
         assert sim_data is not None, "simulate_axswarm returned no data"
 
         t = sim_data["timestamps"][::10]
+        drone_order = list(self.choreographer.agents.items())
+        p_nom = np.stack([sim_data["controls"][:, i, :3] for i, _ in drone_order], axis=1).astype(float)
+        p_corr = np.empty(p_nom.shape, dtype=float)
+        offline_error = None
+        try:
+            if (len(t) < 5 or len(t) != len(p_nom) or not np.all(np.isfinite(t))
+                    or not np.all(np.isfinite(p_nom)) or np.any(np.diff(t) <= 0)):
+                raise ValueError("Offline CBF requires aligned finite points and increasing timestamps")
+            p_corr[0] = p_nom[0]
+            for k in range(len(t) - 1):
+                dt = t[k + 1] - t[k]
+                v_nom = (p_nom[k + 1] - p_nom[k]) / dt
+                try:
+                    v_corr, diagnostics = correct_velocity(p_corr[k], v_nom, dt)
+                    self.offline_fallback_count += int(diagnostics["fallback"])
+                except Exception as exc:
+                    raise ValueError(
+                        f"Offline CBF failed at sample {k} -> {k+1}, "
+                        f"t={t[k]:.6g} -> {t[k+1]:.6g}: {exc}"
+                    ) from exc
+                p_corr[k + 1] = p_corr[k] + dt * v_corr
+        except Exception as exc:
+            offline_error = exc
+            logger.error("%s", exc)
         print(
             f"[DEBUG backend] building splines: t.shape={t.shape} "
             f"controls.shape={sim_data['controls'].shape}"
@@ -679,6 +833,18 @@ class AppBackend:
                 make_smoothing_spline(t, controls[:, j], lam=lam) for j in range(3)
             ]
         print(f"[DEBUG backend] splines built for drones: {list(self.splines.keys())}")
+        if offline_error is None:
+            try:
+                self.offline_corrected_splines = {
+                    smoothing: {
+                        drone: [make_smoothing_spline(t, p_corr[:, i, axis], lam=smoothing)
+                                for axis in range(3)]
+                        for i, (_, drone) in enumerate(drone_order)
+                    } for smoothing in (0.0, 0.1)
+                }
+            except Exception as exc:
+                offline_error = ValueError(f"Offline corrected spline fit failed: {exc}")
+                logger.error("%s", offline_error)
 
         if gui:
         #     self._start_viz(self.splines, float(t[-1]))
@@ -692,25 +858,46 @@ class AppBackend:
             )
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            for enable_cbf in (False, True):
-                mode = "ON" if enable_cbf else "OFF"
-                logger.info("Starting Crazyflow CBF %s", mode)
+            for cbf_mode in ("off", "osqp"):
+                logger.info("Starting Crazyflow CBF %s", cbf_mode.upper())
 
                 self._start_viz(
                     self.splines,
                     duration,
-                    enable_cbf=enable_cbf,
+                    cbf_mode=cbf_mode,
                     output_dir=output_dir,
                 )
 
                 rc = self._viz_proc.wait()
                 if rc != 0:
                     raise RuntimeError(
-                        f"Crazyflow CBF {mode} failed: {rc}"
+                        f"Crazyflow CBF {cbf_mode} failed: {rc}"
                     )
 
             logger.info("CBF comparison saved to %s", output_dir)
+            initial_positions = np.array([[s(0.0) for s in axes] for axes in self.splines.values()])
+            runs = [("original_off_10hz", self.splines)]
+            if offline_error is None:
+                runs.extend((f"offline_corrected_lam_{smoothing}_off_10hz", corrected)
+                            for smoothing, corrected in self.offline_corrected_splines.items())
+            for name, curves in runs:
+                self._start_viz(
+                    curves, duration, cbf_mode="off", output_dir=output_dir / name,
+                    reference_freq=int(self.drone_controller.freq),
+                    initial_positions=initial_positions,
+                    offline_fallback_count=(self.offline_fallback_count
+                                            if curves is not self.splines else 0),
+                )
+                rc = self._viz_proc.wait()
+                if rc != 0:
+                    raise RuntimeError(f"Crazyflow {name} failed: {rc}")
+                if curves is self.offline_corrected_splines.get(0.1):
+                    self._offline_deploy_duration = duration
+                    self._offline_deploy_waypoints = simulated_waypoints
+                logger.info("%s metrics saved to %s", name, output_dir / name)
 
+        if offline_error is not None:
+            raise RuntimeError(str(offline_error)) from offline_error
         logger.info("Simulation successful")
         return sim_data
 
@@ -722,9 +909,23 @@ class AppBackend:
         logger.info("Starting replay (duration=%.2f s)", duration)
         self._start_viz(self.splines, duration)
 
-    def deploy(self, drone_ids: list[int] | None = None):
+    def deploy(self, drone_ids: list[int] | None = None, *, spline_set: str = "Original"):
         logger.info("Deploying drones")
-        assert self.splines, "Please run the simulation first!"
+        if spline_set == "Original":
+            splines = self.splines
+            assert splines, "Please run the simulation first!"
+            duration = float(np.max(self.waypoints["time"][:, -1]))
+        elif spline_set == "Offline CBF":
+            splines = self.offline_corrected_splines.get(0.1)
+            if (not splines or self._offline_deploy_duration is None
+                    or self._offline_deploy_waypoints != pickle.dumps(self.waypoints)):
+                raise ValueError(
+                    "Offline CBF is unavailable: complete its lam=0.1 simulation "
+                    "for the current choreography before deploying."
+                )
+            duration = self._offline_deploy_duration
+        else:
+            raise ValueError(f"Unknown spline set: {spline_set}")
         if not self.drone_controller._ros_running:
             raise RuntimeError("ROS is not running. Please start ROS before deploying.")
 
@@ -740,7 +941,7 @@ class AppBackend:
         print(self.waypoints)
         
         # duration = next(iter(self.waypoints.values()))[-1, 0]
-        duration = float(np.max(self.waypoints["time"][:, -1]))
+        logger.info("Deploy spline set: %s (duration=%.2f s)", spline_set, duration)
         # try:
         #     self.music_manager.song = original_song + "[deploy]"
         # except AssertionError:
@@ -751,7 +952,7 @@ class AppBackend:
         #self.music_manager.play()
         # self.drone_controller.run_spline_trajectories(self.splines, duration=duration)
         try:
-            self.drone_controller.run_spline_trajectories(self.splines, duration=duration)
+            self.drone_controller.run_spline_trajectories(splines, duration=duration)
         finally:
             self.drone_controller.land_full_state(landing_height=0.05, duration=6.0)
         
@@ -804,6 +1005,10 @@ class AppBackend:
 
         self.waypoints = None
         self.splines.clear()
+        self.offline_corrected_splines.clear()
+        self.offline_fallback_count = 0
+        self._offline_deploy_duration = None
+        self._offline_deploy_waypoints = None
         for attr in ("full_trajectory", "sim_results"):
             if hasattr(self, attr):
                 delattr(self, attr)
