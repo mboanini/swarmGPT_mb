@@ -487,7 +487,7 @@ finally:
         cbf_mode=CBF_MODE,
         step_wall_seconds=np.asarray(step_wall_seconds),
         initial_positions=pos[0],
-        offline_fallback_count=payload.get("offline_fallback_count", 0),
+        offline_fallback_count=0,  # Retain the log field; there is no offline QP now.
         spline_timestamps=spline_times,
         spline_positions=spline_positions,
         spline_min_h=spline_metrics[:, 0],
@@ -509,9 +509,11 @@ finally:
         "solver_params": ({"settings": "osqp_defaults"} if CBF_MODE == "osqp" else {}),
         "physics_num_samples": int(len(physics_metrics)),
         "fallback_count": int(np.sum(physics.get("fallback", []))),
-        "offline_fallback_count": int(payload.get("offline_fallback_count", 0)),
+        "offline_fallback_count": 0,
         "physics_min_h": float(np.min(physics_metrics[:, 0])) if len(physics_metrics) else None,
         "physics_samples_with_violations": int(np.sum(physics_metrics[:, 2] > 0)),
+        "physics_min_distance_m": float(np.min(physics_metrics[:, 1])) if len(physics_metrics) else None,
+        "physics_samples_below_0_20m": int(np.sum(physics_metrics[:, 1] < 0.20)),
         "step_wall_seconds_total": float(np.sum(step_wall_seconds)),
         "step_timing_scope": "state_control + five physics steps + diagnostics synchronization; "
                              "excludes warmup, spline evaluation, rendering and file writes",
@@ -521,6 +523,9 @@ finally:
         "samples_with_violations": int(np.sum(violations > 0)),
         "total_pair_violations": int(np.sum(violations)),
     }
+
+    if payload.get("lam") is not None:
+        summary["lam"] = payload["lam"]
 
     with open(output_dir / f"{mode}_summary.json", "w") as f:
         json.dump(summary, f, indent=2)
@@ -568,10 +573,10 @@ class AppBackend:
         # Initialize drone control elements
         self.waypoints = None # High-level LLM commands
         self.splines: dict = {} # Low-level optimized commands from axswarm
-        self.offline_corrected_splines: dict = {}  # smoothing lambda -> drone -> xyz splines
-        self.offline_fallback_count = 0
-        self._offline_deploy_duration: float | None = None
-        self._offline_deploy_waypoints: bytes | None = None
+        self.splines_duration: float | None = None
+        self.reconstructed_splines: dict = {}
+        self.reconstructed_splines_duration: float | None = None
+        self._simulated_waypoints: bytes | None = None
         
         self.drone_controller = DroneController(10) # Controller for the Crazyflie drones
         # Initialize chat elements
@@ -616,7 +621,7 @@ class AppBackend:
         self, splines: dict, duration: float, cbf_mode: Literal["off", "osqp"] = "osqp",
         output_dir: Path | None = None,
         *, reference_freq: int | None = None, initial_positions: np.ndarray | None = None,
-        offline_fallback_count: int = 0,
+        lam: float | None = None,
     ) -> None:
         """Kill any existing visualizer, serialize splines to disk, launch new subprocess."""
         if cbf_mode not in ("off", "osqp"):
@@ -632,8 +637,9 @@ class AppBackend:
             "output_dir": str(output_dir),
             "reference_freq": reference_freq,
             "initial_positions": initial_positions,
-            "offline_fallback_count": offline_fallback_count,
         }
+        if lam is not None:
+            payload["lam"] = lam
         fd, tmp_path = tempfile.mkstemp(suffix=".pkl", prefix="swarmgpt_viz_")
         try:
             with os.fdopen(fd, "wb") as f:
@@ -770,14 +776,43 @@ class AppBackend:
         logger.info("Successfully generated choreography")
         return self.choreographer.messages
 
+    def _build_corrected_splines(self, path: Path, *, lam: float = 0.1) -> tuple[dict, float]:
+        """Fit the OSQP positions in the original simulation's drone order."""
+        with np.load(path, allow_pickle=False) as result:
+            timestamps = np.asarray(result["timestamps"], dtype=float)
+            positions = np.asarray(result["positions"], dtype=float)
+        drone_order = list(self.splines)
+        if (
+            timestamps.ndim != 1 or timestamps.size == 0
+            or positions.shape != (timestamps.size, len(drone_order), 3)
+            or not np.all(np.isfinite(timestamps))
+            or not np.all(np.isfinite(positions))
+            or np.any(np.diff(timestamps) <= 0) or timestamps[0] < 0
+        ):
+            raise ValueError("Invalid OSQP timestamps or positions for corrected splines")
+        if timestamps[0] > 0:
+            initial_positions = np.array([
+                [s(0.0) for s in self.splines[drone]] for drone in drone_order
+            ])
+            timestamps = np.concatenate(([0.0], timestamps))
+            positions = np.concatenate((initial_positions[None, ...], positions), axis=0)
+        if timestamps.size < 5 or timestamps[-1] <= 0:
+            raise ValueError("At least five timestamps are required for corrected splines")
+        corrected = {
+            drone: [make_smoothing_spline(timestamps, positions[:, i, axis], lam=lam)
+                    for axis in range(3)]
+            for i, drone in enumerate(drone_order)
+        }
+        return corrected, float(timestamps[-1])
+
     def simulate(self, gui: bool = True):
         """Run axswarm, build splines, then launch visualizer in a fresh subprocess."""
         logger.info("Simulating trajectories with axswarm")
         self.splines.clear()
-        self.offline_corrected_splines.clear()
-        self.offline_fallback_count = 0
-        self._offline_deploy_duration = None
-        self._offline_deploy_waypoints = None
+        self.splines_duration = None
+        self.reconstructed_splines.clear()
+        self.reconstructed_splines_duration = None
+        self._simulated_waypoints = None
         if hasattr(self, "sim_results"):
             del self.sim_results
         assert self.waypoints is not None, "Please generate a choreography first"
@@ -793,30 +828,6 @@ class AppBackend:
         assert sim_data is not None, "simulate_axswarm returned no data"
 
         t = sim_data["timestamps"][::10]
-        drone_order = list(self.choreographer.agents.items())
-        p_nom = np.stack([sim_data["controls"][:, i, :3] for i, _ in drone_order], axis=1).astype(float)
-        p_corr = np.empty(p_nom.shape, dtype=float)
-        offline_error = None
-        try:
-            if (len(t) < 5 or len(t) != len(p_nom) or not np.all(np.isfinite(t))
-                    or not np.all(np.isfinite(p_nom)) or np.any(np.diff(t) <= 0)):
-                raise ValueError("Offline CBF requires aligned finite points and increasing timestamps")
-            p_corr[0] = p_nom[0]
-            for k in range(len(t) - 1):
-                dt = t[k + 1] - t[k]
-                v_nom = (p_nom[k + 1] - p_nom[k]) / dt
-                try:
-                    v_corr, diagnostics = correct_velocity(p_corr[k], v_nom, dt)
-                    self.offline_fallback_count += int(diagnostics["fallback"])
-                except Exception as exc:
-                    raise ValueError(
-                        f"Offline CBF failed at sample {k} -> {k+1}, "
-                        f"t={t[k]:.6g} -> {t[k+1]:.6g}: {exc}"
-                    ) from exc
-                p_corr[k + 1] = p_corr[k] + dt * v_corr
-        except Exception as exc:
-            offline_error = exc
-            logger.error("%s", exc)
         print(
             f"[DEBUG backend] building splines: t.shape={t.shape} "
             f"controls.shape={sim_data['controls'].shape}"
@@ -833,18 +844,8 @@ class AppBackend:
                 make_smoothing_spline(t, controls[:, j], lam=lam) for j in range(3)
             ]
         print(f"[DEBUG backend] splines built for drones: {list(self.splines.keys())}")
-        if offline_error is None:
-            try:
-                self.offline_corrected_splines = {
-                    smoothing: {
-                        drone: [make_smoothing_spline(t, p_corr[:, i, axis], lam=smoothing)
-                                for axis in range(3)]
-                        for i, (_, drone) in enumerate(drone_order)
-                    } for smoothing in (0.0, 0.1)
-                }
-            except Exception as exc:
-                offline_error = ValueError(f"Offline corrected spline fit failed: {exc}")
-                logger.error("%s", offline_error)
+        self.splines_duration = float(np.max(self.waypoints["time"][:, -1]))
+        self._simulated_waypoints = simulated_waypoints
 
         if gui:
         #     self._start_viz(self.splines, float(t[-1]))
@@ -876,28 +877,25 @@ class AppBackend:
 
             logger.info("CBF comparison saved to %s", output_dir)
             initial_positions = np.array([[s(0.0) for s in axes] for axes in self.splines.values()])
-            runs = [("original_off_10hz", self.splines)]
-            if offline_error is None:
-                runs.extend((f"offline_corrected_lam_{smoothing}_off_10hz", corrected)
-                            for smoothing, corrected in self.offline_corrected_splines.items())
-            for name, curves in runs:
-                self._start_viz(
-                    curves, duration, cbf_mode="off", output_dir=output_dir / name,
-                    reference_freq=int(self.drone_controller.freq),
-                    initial_positions=initial_positions,
-                    offline_fallback_count=(self.offline_fallback_count
-                                            if curves is not self.splines else 0),
-                )
-                rc = self._viz_proc.wait()
-                if rc != 0:
-                    raise RuntimeError(f"Crazyflow {name} failed: {rc}")
-                if curves is self.offline_corrected_splines.get(0.1):
-                    self._offline_deploy_duration = duration
-                    self._offline_deploy_waypoints = simulated_waypoints
-                logger.info("%s metrics saved to %s", name, output_dir / name)
+            smoothed, smoothed_duration = self._build_corrected_splines(
+                output_dir / "cbf_osqp.npz", lam=0.1
+            )
+            smoothed_output_dir = output_dir / "reconstructed_from_osqp_lam_0.1_off_10hz"
+            self._start_viz(
+                smoothed, smoothed_duration, cbf_mode="off",
+                output_dir=smoothed_output_dir, reference_freq=10,
+                initial_positions=initial_positions, lam=0.1,
+            )
+            rc = self._viz_proc.wait()
+            if rc != 0:
+                raise RuntimeError(f"Crazyflow reconstructed lam=0.1 CBF off failed: {rc}")
+            summary_path = smoothed_output_dir / "cbf_off_summary.json"
+            if not summary_path.is_file():
+                raise RuntimeError(f"Reconstructed lam=0.1 simulation summary missing: {summary_path}")
+            self.reconstructed_splines = smoothed
+            self.reconstructed_splines_duration = smoothed_duration
+            logger.info("Reconstructed lam=0.1 simulation complete; metrics saved to %s", summary_path)
 
-        if offline_error is not None:
-            raise RuntimeError(str(offline_error)) from offline_error
         logger.info("Simulation successful")
         return sim_data
 
@@ -913,25 +911,40 @@ class AppBackend:
         logger.info("Deploying drones")
         if spline_set == "Original":
             splines = self.splines
-            assert splines, "Please run the simulation first!"
-            duration = float(np.max(self.waypoints["time"][:, -1]))
-        elif spline_set == "Offline CBF":
-            splines = self.offline_corrected_splines.get(0.1)
-            if (not splines or self._offline_deploy_duration is None
-                    or self._offline_deploy_waypoints != pickle.dumps(self.waypoints)):
-                raise ValueError(
-                    "Offline CBF is unavailable: complete its lam=0.1 simulation "
-                    "for the current choreography before deploying."
-                )
-            duration = self._offline_deploy_duration
+            duration = self.splines_duration
+        elif spline_set == "with CBF":
+            splines = self.reconstructed_splines
+            duration = self.reconstructed_splines_duration
         else:
             raise ValueError(f"Unknown spline set: {spline_set}")
+        if not splines or duration is None or not np.isfinite(duration) or duration <= 0:
+            raise ValueError(f"{spline_set}: complete the corresponding simulation before deploying.")
+        if self._simulated_waypoints != pickle.dumps(self.waypoints):
+            raise ValueError("The choreography has changed. Run Simulate again before deploying.")
+        if set(splines) != set(self.choreographer.agents.values()):
+            raise ValueError("The selected splines do not match the current choreography's drones.")
+        for drone, axes in splines.items():
+            try:
+                valid = len(axes) == 3 and all(
+                    np.all(np.isfinite(s.t)) and np.all(np.isfinite(s.c))
+                    and np.all(np.diff(s.t) >= 0)
+                    and np.all(np.isfinite(s([0.0, duration])))
+                    and np.all(np.isfinite(s.derivative()([0.0, duration])))
+                    for s in axes
+                )
+            except (AttributeError, TypeError, ValueError):
+                valid = False
+            if not valid:
+                raise ValueError(f"Invalid {spline_set} splines for drone {drone}.")
         if not self.drone_controller._ros_running:
             raise RuntimeError("ROS is not running. Please start ROS before deploying.")
 
+        cfs = self.drone_controller.swarm.allcfs.crazyfliesById
+        selected_ids = set(cfs) if drone_ids is None else set(drone_ids)
+        if not selected_ids or not selected_ids.issubset(cfs) or not selected_ids.issubset(splines):
+            raise ValueError("The selected drones are unavailable or have no trajectory.")
         if drone_ids is not None:
-            cfs = self.drone_controller.swarm.allcfs.crazyfliesById
-            cfs = {k: v for k, v in cfs.items() if k in drone_ids}
+            cfs = {k: v for k, v in cfs.items() if k in selected_ids}
             self.drone_controller.swarm.allcfs.crazyfliesById = cfs
 
         # for i, drone in enumerate(self.drone_controller.swarm.allcfs.crazyfliesById.values()):
@@ -1005,10 +1018,10 @@ class AppBackend:
 
         self.waypoints = None
         self.splines.clear()
-        self.offline_corrected_splines.clear()
-        self.offline_fallback_count = 0
-        self._offline_deploy_duration = None
-        self._offline_deploy_waypoints = None
+        self.splines_duration = None
+        self.reconstructed_splines.clear()
+        self.reconstructed_splines_duration = None
+        self._simulated_waypoints = None
         for attr in ("full_trajectory", "sim_results"):
             if hasattr(self, attr):
                 delattr(self, attr)

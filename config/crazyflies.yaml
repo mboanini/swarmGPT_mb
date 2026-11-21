@@ -29,9 +29,9 @@
       cf1:
         enabled: true
         uri: radio://0/80/2M/E7E7E7E701
-        # initial_position: [0.0, -1.5, 0.0]
+        initial_position: [0.0, -1.5, 0.0]
         # initial_position: [1.0, -1.0, 0.0] # rectangle
-        initial_position: [0.0, -0.6, 0.0] # triangle
+        #initial_position: [0.0, -0.6, 0.0] # triangle
         type: cf22  # see robot_types
         # firmware_params:
         #   kalman:
@@ -47,9 +47,9 @@
       cf3:
         enabled: true
         uri: radio://0/80/2M/E7E7E7E703
-        #initial_position: [0.0, -1.0, 0.0]
+        initial_position: [0.0, -1.0, 0.0]
         # initial_position: [0.0, -1.0, 0.0]
-        initial_position: [-0.8, -1.2, 0.0]
+        #initial_position: [-0.8, -1.2, 0.0]
         type: cf22  # see robot_types
         # firmware_params:
         #   kalman:
@@ -65,9 +65,9 @@
       cf5:
         enabled: true
         uri: radio://0/80/2M/E7E7E7E705
-        # initial_position: [0.0, -0.5, 0.0]
+        initial_position: [0.0, -0.5, 0.0]
         # initial_position: [-1.0, -1.0, 0.0]
-        initial_position: [-0.8, 0.0, 0.0]
+        # initial_position: [-0.8, 0.0, 0.0]
         type: cf22  # see robot_types
         # firmware_params:
         #   kalman:
@@ -83,9 +83,9 @@
       cf7:
         enabled: true
         uri: radio://0/80/2M/E7E7E7E707
-        #initial_position: [0.0, 0.5, 0.0]
+        initial_position: [0.0, 0.5, 0.0]
         # initial_position: [0.0, 1.0, 0.0]
-        initial_position: [0.0, 0.6, 0.0]
+        #initial_position: [0.0, 0.6, 0.0]
         type: cf22  # see robot_types
         # firmware_params:
         #   kalman:
@@ -102,9 +102,9 @@
       cf6:
         enabled: true
         uri: radio://0/80/2M/E7E7E7E706
-        # initial_position: [0.0, 0.0, 0.0]
+        initial_position: [0.0, 0.0, 0.0]
         # initial_position: [-1.0, 1.0, 0.0] # rectangle
-        initial_position: [-0.8, 1.2, 0.0] # triangle
+        # initial_position: [-0.8, 1.2, 0.0] # triangle
         type: cf22  # see robot_types
         # firmware_params:
         #   kalman:
@@ -120,9 +120,9 @@
       cf8:
         enabled: true
         uri: radio://0/80/2M/E7E7E7E708
-        # initial_position: [0.0, 1.0, 0.0]
+        initial_position: [0.0, 1.0, 0.0]
         # initial_position: [1.0, 1.0, 0.0]
-        initial_position: [0.8, 0.0, 0.0]
+        # initial_position: [0.8, 0.0, 0.0]
         type: cf22  # see robot_types
         # firmware_params:
         #   kalman:

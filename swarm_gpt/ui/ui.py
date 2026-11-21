@@ -565,6 +565,10 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
                 visible=False,
                 elem_id="sw-deploy",
             )
+            deploy_spline_set = gr.Dropdown(
+                choices=["Original"], value="Original", label="Deploy splines",
+                visible=False,
+            )
 
         # event handlers
 
@@ -597,6 +601,7 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
                 gr.update(visible=True),
                 gr.update(visible=True),
                 gr.update(visible=True),
+                gr.update(visible=True, choices=["Original"], value="Original"),
             ),
             inputs=[],
             outputs=[
@@ -606,6 +611,7 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
                 alter_button,
                 new_command_button,
                 deploy_button,
+                deploy_spline_set,
             ],
             show_progress="hidden",
         )
@@ -656,6 +662,7 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
                 gr.update(interactive=True),
                 gr.update(value=""),
                 gr.update(visible=False),
+                gr.update(choices=["Original"], value="Original"),
             )
 
         def refinement_failed():
@@ -686,6 +693,7 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
                     refine_button,
                     message,
                     replay_sim_button,
+                    deploy_spline_set,
                 ],
                 show_progress="hidden",
             )
@@ -705,12 +713,14 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
                 gr.update(interactive=False),
                 gr.update(visible=False),
                 gr.update(visible=True, value=""),
+                gr.update(choices=["Original"], value="Original", interactive=False),
             ),
             inputs=[],
             outputs=[
                 sim_button,
                 replay_sim_button,
                 progress_bar,
+                deploy_spline_set,
             ],
             show_progress="hidden",
         )
@@ -727,12 +737,18 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
                 gr.update(interactive=True),
                 gr.update(visible=True),
                 gr.update(visible=False),
+                gr.update(
+                    choices=(["Original", "with CBF"] if backend.reconstructed_splines
+                             and backend.reconstructed_splines_duration is not None else ["Original"]),
+                    value="Original", interactive=True,
+                ),
             ),
             inputs=[],
             outputs=[
                 sim_button,
                 replay_sim_button,
                 progress_bar,
+                deploy_spline_set,
             ],
             show_progress="hidden",
         )
@@ -742,11 +758,13 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
             lambda: (
                 gr.update(interactive=True),
                 gr.update(visible=False),
+                gr.update(choices=["Original"], value="Original", interactive=True),
             ),
             inputs=[],
             outputs=[
                 sim_button,
                 progress_bar,
+                deploy_spline_set,
             ],
             show_progress="hidden",
         )
@@ -782,9 +800,15 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
 
         # deploy
 
+        def deploy_selected(spline_set):
+            try:
+                return backend.deploy(spline_set=spline_set)
+            except (ValueError, RuntimeError) as exc:
+                raise gr.Error(str(exc)) from exc
+
         deploy_button.click(
-            backend.deploy,
-            inputs=[],
+            deploy_selected,
+            inputs=[deploy_spline_set],
             outputs=[chatbot],
         )
 
@@ -811,6 +835,7 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
             alter_button,
             new_command_button,
             deploy_button,
+            deploy_spline_set,
             refine_button,
             cancel_refine_button,
             progress_bar,
@@ -830,6 +855,7 @@ def create_ui(backend: AppBackend) -> gr.Blocks:
                 gr.update(visible=False),
                 gr.update(visible=False),
                 gr.update(visible=False),
+                gr.update(choices=["Original"], value="Original", visible=False, interactive=True),
                 gr.update(interactive=True),
                 gr.update(interactive=True),
                 gr.update(value="", visible=False),
