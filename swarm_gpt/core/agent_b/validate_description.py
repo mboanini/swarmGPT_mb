@@ -11,12 +11,13 @@ class ValidateNameDesc:
 
     def __init__(
         self,
-        existing_names: list[str] = list(motion_primitives.keys()),
+        existing_names: list[str] | None = None,
         similarity_threshold: float = 0.85,
         desc_min_words: int = 10,
         desc_max_words: int = 60,
     ):
-        self.existing_names = existing_names
+        self.existing_names = (list(motion_primitives.keys()) 
+                                if existing_names is None else existing_names)
         self.similarity_threshold = similarity_threshold
         self.desc_min_words = desc_min_words
         self.desc_max_words = desc_max_words

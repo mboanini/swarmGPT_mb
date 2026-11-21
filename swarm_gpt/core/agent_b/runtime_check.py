@@ -3,6 +3,7 @@ import numbers
 import traceback
 
 import numpy as np
+from numpy.typing import NDArray
 
 import swarm_gpt.core.motion_primitives as _mp_module
 from swarm_gpt.core.agent_b.parser import INJECTED_HELPERS
@@ -13,7 +14,7 @@ _MIN_DRONE_DISTANCE_CM = 15.0
 
 def run(body: str, func_name: str, test_params: tuple, scenario: RuntimeScenario) -> list[str]:
     """Execute the function with test inputs. Returns a list of error strings (empty = success)."""
-    namespace = {"np": np, **{name: getattr(_mp_module, name) for name in INJECTED_HELPERS}}
+    namespace = {"np": np, "NDArray": NDArray, **{name: getattr(_mp_module, name) for name in INJECTED_HELPERS}}
 
     try:
         exec(body, namespace)  # noqa: S102

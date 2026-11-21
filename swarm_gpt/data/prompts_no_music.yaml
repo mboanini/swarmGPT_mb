@@ -9,9 +9,9 @@ user_initial: |
 
   <physical_constraints>
   - Coordinates are integers in cm.
-  - Bounds: x, y in [-200, 200] cm, z in [25, 170] cm
+  - Bounds: x, y in [-150, 150] cm, z in [25, 130] cm
   - Max speed: {max_speed} cm/s -> 1 step = 0.5s -> at most {max_dist_per_step} cm per step
-  - Min distance between any two drones at all times: 40 cm
+  - Min distance between any two drones at all times: 15 cm
   </physical_constraints>
 
   <drone_ids>
